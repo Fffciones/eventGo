@@ -1,0 +1,6 @@
+{
+  "name": "EventGo",
+  "description": "Gestão inteligente de equipes e contratação de profissionais para eventos em tempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
