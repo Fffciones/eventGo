@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ClientEvent, Professional } from '../types';
 import { CLIENT_AVATARS, RICARDO_PROFILE } from '../data';
+import type { UserProfile } from '../hooks/useProfile';
 
 interface ProfileViewProps {
   events: ClientEvent[];
@@ -26,9 +27,11 @@ interface ProfileViewProps {
   favoritePros: Professional[];
   onToggleFavorite: (id: string) => void;
   onSelectPro: (id: string) => void;
+  profile?: UserProfile | null;
+  onSignOut?: () => void;
 }
 
-export default function ProfileView({ events, onAddEvent, favoritePros, onToggleFavorite, onSelectPro }: ProfileViewProps) {
+export default function ProfileView({ events, onAddEvent, favoritePros, onToggleFavorite, onSelectPro, profile, onSignOut }: ProfileViewProps) {
   const [newEventModal, setNewEventModal] = useState(false);
   const [eventName, setEventName] = useState('');
   const [eventDate, setEventDate] = useState('');
@@ -68,20 +71,28 @@ export default function ProfileView({ events, onAddEvent, favoritePros, onToggle
         {/* Profile Card Info */}
         <div className="md:col-span-2 bg-white p-5 rounded-2xl border border-outline-variant/30 flex flex-col md:flex-row gap-5 items-start md:items-center shadow-sm">
           <div className="relative">
-            <img 
-              alt="Rodrigo Silva Portrait Pic" 
-              className="w-24 h-24 rounded-2xl object-cover border border-outline-variant/20 shadow-inner" 
-              src={CLIENT_AVATARS.rodrigoLarge}
-            />
+            {profile?.avatar_url ? (
+              <img
+                alt={profile.full_name}
+                className="w-24 h-24 rounded-2xl object-cover border border-outline-variant/20 shadow-inner"
+                src={profile.avatar_url}
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-2xl bg-primary/10 border border-outline-variant/20 flex items-center justify-center">
+                <span className="font-display text-4xl font-bold text-primary">
+                  {(profile?.full_name ?? 'U')[0].toUpperCase()}
+                </span>
+              </div>
+            )}
             <div className="absolute -bottom-2 -right-2 bg-primary text-on-primary px-2 py-1 rounded-lg flex items-center gap-1 shadow-md">
               <CheckCircle2 className="w-3.5 h-3.5 fill-on-primary text-primary" />
               <span className="font-mono font-bold text-[9px] tracking-wider uppercase">Verificado</span>
             </div>
           </div>
-          
+
           <div className="flex-1 space-y-1">
-            <h1 className="font-display font-extrabold text-2xl text-primary leading-tight">Rodrigo Silva</h1>
-            <p className="text-xs font-semibold text-on-surface-variant">Membro VIP desde Jan 2023 • São Paulo, SP</p>
+            <h1 className="font-display font-extrabold text-2xl text-primary leading-tight">{profile?.full_name ?? '—'}</h1>
+            <p className="text-xs font-semibold text-on-surface-variant">{profile?.email}</p>
             
             <div className="flex gap-4 pt-2">
               <div className="flex flex-col">
@@ -272,6 +283,29 @@ export default function ProfileView({ events, onAddEvent, favoritePros, onToggle
             <ChevronRight className="w-4 h-4 text-outline" />
           </div>
 
+        </div>
+
+        {/* Saldo de créditos + Sair */}
+        <div className="flex flex-col sm:flex-row gap-3 mt-2">
+          {profile?.credit_balance !== undefined && (
+            <div className="flex-1 bg-primary/5 border border-primary/20 rounded-2xl px-5 py-4 flex items-center justify-between">
+              <div>
+                <p className="font-mono text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">Saldo de Créditos</p>
+                <p className="font-display text-2xl font-bold text-primary mt-0.5">
+                  R$ {Number(profile.credit_balance).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <CreditCard className="w-8 h-8 text-primary/30" />
+            </div>
+          )}
+          {onSignOut && (
+            <button
+              onClick={onSignOut}
+              className="flex items-center justify-center gap-2 px-6 py-4 rounded-2xl border border-error/30 text-error hover:bg-error/5 transition-all text-sm font-semibold"
+            >
+              Sair da conta
+            </button>
+          )}
         </div>
       </section>
 

@@ -1,19 +1,16 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Search, 
-  MapPin, 
-  Headphones, 
-  Utensils, 
-  Shield, 
-  Sparkles, 
-  Bolt, 
-  Info, 
-  Check, 
-  Loader2,
-  Users,
+import {
+  Search,
+  MapPin,
+  Headphones,
+  Utensils,
+  Shield,
+  Sparkles,
+  Bolt,
+  Info,
+  Check,
   Compass,
-  Navigation,
   X
 } from 'lucide-react';
 import { MAP_BACKGROUND, MAP_MARKERS_PRESET } from '../data';
@@ -98,13 +95,41 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
     <div className="relative flex-grow w-full overflow-hidden h-[calc(100vh-140px)] md:h-[calc(100vh-80px)]">
       {/* Background Overhead Map Image */}
       <div className="absolute inset-0 w-full h-full bg-surface-dim select-none">
-        <img 
-          className="w-full h-full object-cover opacity-90 transition-all duration-500 pointer-events-none" 
+        <img
+          className="w-full h-full object-cover opacity-90 transition-all duration-500 pointer-events-none"
           src={MAP_BACKGROUND}
           alt="Overhead satellite map view of São Paulo metropolitan grid"
         />
-        {/* Subtle Color Overlay matching standard Mapbox dark-gold design */}
         <div className="absolute inset-0 bg-primary/10 mix-blend-multiply pointer-events-none" />
+      </div>
+
+      {/* FLOATING MARKERS */}
+      <div className="absolute inset-0 pointer-events-none z-15">
+        {filteredMarkers.map((marker) => {
+          const isHovered = hoveredMarker === marker.id;
+          return (
+            <div
+              key={marker.id}
+              className="absolute pointer-events-auto cursor-pointer group"
+              style={{ top: `${marker.latPercent}%`, left: `${marker.lngPercent}%` }}
+              onMouseEnter={() => setHoveredMarker(marker.id)}
+              onMouseLeave={() => setHoveredMarker(null)}
+              onClick={() => handleMarkerClick(marker)}
+            >
+              <div className="relative flex flex-col items-center -translate-x-1/2 -translate-y-1/2">
+                <div className={`marker-pulse bg-primary text-on-primary w-11 h-11 rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10 transition-transform duration-200 ${isHovered ? 'scale-110' : 'scale-100'}`}>
+                  {marker.iconName === 'Headphones' && <Headphones className="w-5 h-5" />}
+                  {marker.iconName === 'Utensils' && <Utensils className="w-5 h-5" />}
+                  {marker.iconName === 'Shield' && <Shield className="w-5 h-5" />}
+                  {marker.iconName === 'Sparkles' && <Sparkles className="w-5 h-5" />}
+                </div>
+                <div className="mt-1 bg-white/95 backdrop-blur-sm px-2.5 py-0.5 rounded-full shadow-sm border border-outline-variant flex items-center gap-1">
+                  <span className="font-mono text-[10px] font-bold text-primary">{marker.eta}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Floating Header Actions / Search Bar */}
@@ -133,38 +158,6 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
             Buscar
           </button>
         </div>
-      </div>
-
-      {/* FLOATING MARKERS */}
-      <div className="absolute inset-0 pointer-events-none z-15">
-        {filteredMarkers.map((marker) => {
-          const isHovered = hoveredMarker === marker.id;
-          return (
-            <div 
-              key={marker.id}
-              className="absolute pointer-events-auto cursor-pointer group"
-              style={{ top: `${marker.latPercent}%`, left: `${marker.lngPercent}%` }}
-              onMouseEnter={() => setHoveredMarker(marker.id)}
-              onMouseLeave={() => setHoveredMarker(null)}
-              onClick={() => handleMarkerClick(marker)}
-            >
-              <div className="relative flex flex-col items-center -translate-x-1/2 -translate-y-1/2">
-                {/* Visual marker element */}
-                <div className={`marker-pulse bg-primary text-on-primary w-11 h-11 rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10 transition-transform duration-200 ${isHovered ? 'scale-110' : 'scale-100'}`}>
-                  {marker.iconName === 'Headphones' && <Headphones className="w-5 h-5" />}
-                  {marker.iconName === 'Utensils' && <Utensils className="w-5 h-5" />}
-                  {marker.iconName === 'Shield' && <Shield className="w-5 h-5" />}
-                  {marker.iconName === 'Sparkles' && <Sparkles className="w-5 h-5" />}
-                </div>
-
-                {/* Tag label */}
-                <div className="mt-1 bg-white/95 backdrop-blur-sm px-2.5 py-0.5 rounded-full shadow-sm border border-outline-variant flex items-center gap-1">
-                  <span className="font-mono text-[10px] font-bold text-primary">{marker.eta}</span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
       {/* Marker Detail Overlay Panel when clicked */}

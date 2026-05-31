@@ -10,6 +10,12 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from './hooks/useAuth';
+import { useNotifications } from './hooks/useNotifications';
+import { useProfile } from './hooks/useProfile';
+import { useEvents } from './hooks/useEvents';
+import AuthScreen from './components/auth/AuthScreen';
+import CreateEventScreen from './components/CreateEventScreen';
 import { 
   Home, 
   CalendarCheck, 
@@ -32,6 +38,10 @@ import FavoritesView from './components/FavoritesView';
 import ProfileView from './components/ProfileView';
 
 export default function App() {
+  const { user, loading, signOut } = useAuth();
+  const { unreadCount } = useNotifications(user?.id);
+  const { profile } = useProfile(user?.id);
+
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const saved = localStorage.getItem('eventgo_active_tab');
     return (saved as TabType) || 'home';
@@ -42,6 +52,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_BOOKINGS;
   });
 
+  const { events: dbEvents, createEvent } = useEvents(profile?.client_id);
   const [events, setEvents] = useState<ClientEvent[]>(() => {
     const saved = localStorage.getItem('eventgo_events');
     return saved ? JSON.parse(saved) : INITIAL_CLIENT_EVENTS;
@@ -49,8 +60,9 @@ export default function App() {
 
   const [favoritePros, setFavoritePros] = useState<Professional[]>(FAVORITE_PROFESSIONALS);
   const [selectedProId, setSelectedProId] = useState<string | null>(null);
+  const [showCreateEvent, setShowCreateEvent] = useState(false);
 
-  // Sync to local storage
+  // Sync to local storage — hooks ANTES de qualquer return condicional
   useEffect(() => {
     localStorage.setItem('eventgo_active_tab', activeTab);
   }, [activeTab]);
@@ -62,6 +74,22 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('eventgo_events', JSON.stringify(events));
   }, [events]);
+
+  // Guards — apenas após todos os hooks
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <MapPin className="text-primary w-8 h-8 animate-pulse" />
+          <span className="font-display text-xl font-bold text-primary">EventPro</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen onAuthenticated={() => {}} />;
+  }
 
   const activeEvent = events.find(e => e.status === 'ATIVO') || events[0];
 
@@ -94,6 +122,20 @@ export default function App() {
     }
   };
 
+  // Tela de criação de evento (full screen)
+  if (showCreateEvent && profile) {
+    return (
+      <CreateEventScreen
+        profile={profile}
+        onBack={() => setShowCreateEvent(false)}
+        onCreated={() => {
+          setShowCreateEvent(false);
+          setActiveTab('bookings');
+        }}
+      />
+    );
+  }
+
   return (
     <div className="bg-background text-on-background font-sans min-h-screen flex flex-col justify-between overflow-x-hidden antialiased">
       {/* Top Application Header Bar */}
@@ -102,22 +144,29 @@ export default function App() {
         <header className="w-full top-0 sticky bg-white shadow-sm z-40 flex items-center justify-between px-margin-mobile py-3.5 border-b border-slate-100">
           <div className="flex items-center gap-2 select-none">
             <MapPin className="text-primary w-6 h-6 animate-pulse" />
-            <span className="font-display text-2xl font-black text-primary tracking-tight">EventGo</span>
+            <span className="font-display text-2xl font-black text-primary tracking-tight">EventPro</span>
           </div>
           <div className="flex items-center gap-3">
-            <button 
+            <button
+              onClick={() => setShowCreateEvent(true)}
+              className="text-primary hover:bg-primary/10 p-2 rounded-full transition-all"
+              title="Novo evento"
+            >
+              <PlusCircle className="w-5 h-5" />
+            </button>
+            <button
               onClick={() => {
-                const notifications = [
-                  "Um segurança Alfa acaba de entrar em trânsito.",
-                  "Seu setup de som atingiu 85% de conclusão.",
-                  "Mariana Costa deixou uma avaliação positiva para Ricardo."
-                ];
-                alert(`Notificações:\n\n🔔 ${notifications.join('\n\n🔔 ')}`);
+                // TODO: abrir painel de notificações
+              alert(`Você tem ${unreadCount} notificação(ões) não lida(s).`);
               }}
               className="text-[#1a1b1e] hover:bg-slate-100 p-2 rounded-full transform active:scale-95 transition-all text-xs relative"
             >
-              <div className="absolute top-1 right-1 w-2 h-2 bg-secondary-container rounded-full animate-ping" />
-              <div className="absolute top-1 right-1 w-2 h-2 bg-secondary bg-sky-400 rounded-full" />
+              {unreadCount > 0 && (
+                <>
+                  <div className="absolute top-1 right-1 w-2 h-2 bg-sky-400 rounded-full animate-ping" />
+                  <div className="absolute top-1 right-1 w-2 h-2 bg-sky-400 rounded-full" />
+                </>
+              )}
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
               </svg>
@@ -181,12 +230,14 @@ export default function App() {
               />
             )}
             {activeTab === 'profile' && (
-              <ProfileView 
-                events={events} 
+              <ProfileView
+                events={events}
                 onAddEvent={handleAddEvent}
                 favoritePros={favoritePros}
                 onToggleFavorite={handleToggleFavorite}
                 onSelectPro={handleSelectPro}
+                profile={profile}
+                onSignOut={signOut}
               />
             )}
           </motion.div>
