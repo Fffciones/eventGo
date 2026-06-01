@@ -8,7 +8,7 @@ import {
   Shield,
   Sparkles,
   Bolt,
-  Info,
+
   Check,
   Compass,
   X
@@ -27,7 +27,6 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
   const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
   const [hoveredMarker, setHoveredMarker] = useState<string | null>(null);
   const [selectedMarker, setSelectedMarker] = useState<typeof MAP_MARKERS_PRESET[0] | null>(null);
-  const [toastVisible, setToastVisible] = useState(true);
   const [isRequesting, setIsRequesting] = useState(false);
   const [requestStep, setRequestStep] = useState<'idle' | 'category' | 'locating' | 'success'>('idle');
   
@@ -36,13 +35,6 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
   const [reqStaffCount, setReqStaffCount] = useState(4);
   const [reqLocation, setReqLocation] = useState('Palácio das Artes, São Paulo');
 
-  // Trigger floating micro-interaction notification on load
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setToastVisible(true);
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, []);
 
   // Simple handlers
   const handleMarkerClick = (marker: typeof MAP_MARKERS_PRESET[0]) => {
@@ -258,25 +250,25 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
             )}
           </div>
 
-          {/* Active Request Overlay */}
-          <div className="glass-card rounded-2xl p-4 md:p-5 border border-white/60 shadow-xl flex items-center justify-between gap-4">
+          {/* Chamada de Urgência */}
+          <div className="glass-card rounded-2xl p-4 md:p-5 border border-red-200/60 bg-red-50/80 shadow-xl flex items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
-              <div className="bg-secondary-container p-3 rounded-xl shadow-inner text-on-secondary-container">
+              <div className="bg-red-100 p-3 rounded-xl shadow-inner text-red-600">
                 <Bolt className="w-5 h-5 animate-pulse" />
               </div>
               <div className="text-left">
-                <h3 className="font-display font-bold text-lg md:text-xl text-primary leading-tight">Chamar Profissionais</h3>
-                <p className="text-xs text-on-surface-variant flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                  24 disponíveis agora na sua área (São Paulo)
+                <h3 className="font-display font-bold text-lg md:text-xl text-red-700 leading-tight">Contratação Imediata</h3>
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                  Desfalque na sua equipe? Chame agora!
                 </p>
               </div>
             </div>
-            <button 
+            <button
               onClick={handleStartRequest}
-              className="bg-primary hover:bg-primary-container text-on-primary font-semibold text-xs md:text-sm px-5 py-3 rounded-xl active:scale-95 transition-all shadow-md shrink-0 flex items-center gap-1"
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs md:text-sm px-5 py-3 rounded-xl active:scale-95 transition-all shadow-md shrink-0 flex items-center gap-1"
             >
-              Solicitar Serviço
+              Localizar Profissional
             </button>
           </div>
         </div>
@@ -425,44 +417,6 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
         )}
       </AnimatePresence>
 
-      {/* Real-time ETA Floating Notification Toast (Micro-interaction) */}
-      <AnimatePresence>
-        {toastVisible && (
-          <motion.div 
-            initial={{ opacity: 0, x: 200 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 200 }}
-            className="fixed top-24 right-5 z-40 max-w-[320px] transition-transform duration-500 ease-out"
-            id="eta-toast"
-          >
-            <div className="bg-white border-l-4 border-secondary shadow-xl rounded-xl p-4 flex items-start gap-3.5 relative">
-              <button 
-                onClick={() => setToastVisible(false)}
-                className="absolute top-2 right-2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-              <div className="bg-sky-50 text-secondary p-1.5 rounded-lg shrink-0">
-                <Info className="w-5 h-5" />
-              </div>
-              <div className="text-left">
-                <span className="block font-mono text-[10px] font-bold text-secondary uppercase tracking-wider">Novo Profissional</span>
-                <span className="text-xs font-semibold text-on-surface block mt-0.5">Um DJ acaba de ficar disponível a 5 min.</span>
-                <button 
-                  onClick={() => {
-                    onSelectPro('ricardo-1'); // or let's navigate to DJ category
-                    setSelectedFilter('DJ');
-                    setToastVisible(false);
-                  }}
-                  className="text-[11px] font-bold text-primary hover:underline mt-1.5 flex items-center gap-0.5"
-                >
-                  Ver no Mapa →
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

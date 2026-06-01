@@ -3,10 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, MapPin, Calendar, Clock, Users, Plus, Minus,
   Utensils, Headphones, Shield, Sparkles, Camera, Mic,
-  Settings, UserCheck, Loader2, CheckCircle
+  Settings, UserCheck, Loader2, CheckCircle, Search, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useGeocoding } from '../hooks/useGeocoding';
 import type { UserProfile } from '../hooks/useProfile';
+import type { GeoResult } from '../hooks/useGeocoding';
 
 interface CategoryRequest {
   category: string;
@@ -32,7 +34,7 @@ const CATEGORIES = [
 ];
 
 export default function CreateEventScreen({ profile, onBack, onCreated }: CreateEventScreenProps) {
-  const [step, setStep]           = useState<1 | 2 | 3>(1);
+  const [step, setStep]           = useState<1 | 2 | 3 | 4>(1);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const [success, setSuccess]     = useState(false);
@@ -40,12 +42,26 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
   // Step 1 — dados do evento
   const [name, setName]           = useState('');
   const [locationName, setLocationName] = useState('');
+  const [geoResult, setGeoResult] = useState<GeoResult | null>(null);
   const [date, setDate]           = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime]     = useState('');
 
+  const { geocode, loading: geoLoading, error: geoError } = useGeocoding();
+
   // Step 2 — categorias
   const [categories, setCategories] = useState<CategoryRequest[]>([]);
+
+  // Step 3 — briefing
+  const [uniformType, setUniformType]         = useState<'provided' | 'own' | 'none'>('none');
+  const [uniformDetails, setUniformDetails]   = useState('');
+  const [mealType, setMealType]               = useState<'provided' | 'own' | 'none'>('none');
+  const [mealDetails, setMealDetails]         = useState('');
+  const [hasMeetingPoint, setHasMeetingPoint] = useState(false);
+  const [meetingPoint, setMeetingPoint]       = useState('');
+  const [hasTransport, setHasTransport]       = useState(false);
+  const [transportDetails, setTransportDetails] = useState('');
+  const [extraNotes, setExtraNotes]           = useState('');
 
   const toggleCategory = (code: string, label: string) => {
     setCategories(prev => {
@@ -80,19 +96,38 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
       if (!clientData) throw new Error('Perfil de cliente não encontrado.');
 
       const startsAt = new Date(`${date}T${startTime}:00`).toISOString();
-      const endsAt   = new Date(`${date}T${endTime}:00`).toISOString();
+      // Se termina antes do início (ex: 22h→04h), o fim é no dia seguinte
+      const endDate = crossesMidnight
+        ? new Date(new Date(`${date}T${endTime}:00`).getTime() + 24 * 60 * 60 * 1000)
+        : new Date(`${date}T${endTime}:00`);
+      const endsAt = endDate.toISOString();
 
       // Criar evento
+      // Geocodificar endereço se ainda não foi feito
+      let geo = geoResult;
+      if (!geo) {
+        geo = await geocode(locationName);
+        if (!geo) throw new Error('Não foi possível localizar o endereço. Verifique e tente novamente.');
+        setGeoResult(geo);
+      }
+
       const { data: eventData, error: eventError } = await supabase
         .from('events')
         .insert({
           client_id:     clientData.id,
           name,
-          location_name: locationName,
-          location:      `POINT(-46.6388 -23.5489)`, // padrão SP — geolocalização real na próxima versão
+          location_name: geo.formatted,
+          location:      `POINT(${geo.lng} ${geo.lat})`,
           starts_at:     startsAt,
           ends_at:       endsAt,
           status:        'SCHEDULED',
+          briefing: {
+            uniform:      { type: uniformType, details: uniformDetails || null },
+            meal:         { type: mealType,    details: mealDetails    || null },
+            meetingPoint: hasMeetingPoint ? { address: meetingPoint }  : null,
+            transport:    hasTransport    ? { details: transportDetails } : null,
+            notes:        extraNotes      || null,
+          },
         })
         .select()
         .single();
@@ -123,8 +158,23 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
     }
   };
 
+  // Calcula se o evento termina no dia seguinte (ex: 22h → 04h)
+  const crossesMidnight = startTime && endTime && endTime < startTime;
+
+  // Duração em horas (considera virada de meia-noite)
+  const eventDurationHours = (() => {
+    if (!startTime || !endTime) return 0;
+    const [sh, sm] = startTime.split(':').map(Number);
+    const [eh, em] = endTime.split(':').map(Number);
+    const startMins = sh * 60 + sm;
+    let endMins = eh * 60 + em;
+    if (endMins <= startMins) endMins += 24 * 60; // virada de meia-noite
+    return (endMins - startMins) / 60;
+  })();
+
   // Validações por step
-  const step1Valid = name.trim() && locationName.trim() && date && startTime && endTime && endTime > startTime;
+  const step1Valid = name.trim() && locationName.trim() && geoResult && date && startTime && endTime
+    && eventDurationHours >= 0.5; // mínimo 30 minutos
   const step2Valid = categories.length > 0;
 
   if (success) {
@@ -151,11 +201,11 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
         </button>
         <div className="flex-1">
           <h1 className="font-display text-xl font-bold text-primary">Novo Evento</h1>
-          <p className="text-xs text-on-surface-variant">Passo {step} de 3</p>
+          <p className="text-xs text-on-surface-variant">Passo {step} de 4</p>
         </div>
         {/* Progress */}
         <div className="flex gap-1.5">
-          {[1, 2, 3].map(s => (
+          {[1, 2, 3, 4].map(s => (
             <div key={s} className={`h-1.5 w-8 rounded-full transition-colors ${s <= step ? 'bg-primary' : 'bg-outline-variant'}`} />
           ))}
         </div>
@@ -179,12 +229,71 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
                   placeholder="Ex: Casamento Silva & Costa" className={inputClass} />
               </Field>
 
-              <Field label="Local">
+              <Field label="Local do evento">
                 <div className="relative">
                   <MapPin className="absolute left-3 top-3 w-4 h-4 text-on-surface-variant" />
-                  <input type="text" value={locationName} onChange={e => setLocationName(e.target.value)}
-                    placeholder="Nome do espaço ou endereço" className={`${inputClass} pl-9`} />
+                  <input
+                    type="text"
+                    value={locationName}
+                    onChange={e => { setLocationName(e.target.value); setGeoResult(null); }}
+                    onKeyDown={async e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const r = await geocode(locationName);
+                        if (r) setGeoResult(r);
+                      }
+                    }}
+                    placeholder="Ex: Rua das Flores, 100 - São Paulo"
+                    className={`${inputClass} pl-9 pr-12`}
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const r = await geocode(locationName);
+                      if (r) setGeoResult(r);
+                    }}
+                    disabled={!locationName.trim() || geoLoading}
+                    className="absolute right-2 top-2 p-1.5 bg-primary text-on-primary rounded-lg disabled:opacity-40 transition-all"
+                    title="Buscar endereço"
+                  >
+                    {geoLoading
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Search className="w-3.5 h-3.5" />
+                    }
+                  </button>
                 </div>
+
+                {/* Resultado do geocoding */}
+                {geoResult && (
+                  <div className="mt-2 flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-emerald-800">Endereço confirmado</p>
+                      <p className="text-xs text-emerald-700 truncate">{geoResult.formatted}</p>
+                      <p className="text-[10px] text-emerald-600 font-mono mt-0.5">
+                        {geoResult.lat.toFixed(5)}, {geoResult.lng.toFixed(5)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setGeoResult(null); }}
+                      className="text-emerald-500 hover:text-emerald-700 shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Erro de geocoding */}
+                {geoError && !geoResult && (
+                  <p className="mt-1.5 text-xs text-error bg-error-container px-3 py-1.5 rounded-lg">
+                    {geoError}
+                  </p>
+                )}
+
+                <p className="text-[11px] text-on-surface-variant mt-1.5 flex items-center gap-1">
+                  Clique em <Search className="w-3 h-3 inline" /> ou pressione Enter para confirmar o endereço.
+                </p>
               </Field>
 
               <Field label="Data">
@@ -213,8 +322,13 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
                 </Field>
               </div>
 
-              {startTime && endTime && endTime <= startTime && (
-                <p className="text-error text-xs">O horário de término deve ser após o início.</p>
+              {crossesMidnight && (
+                <p className="text-xs text-primary bg-primary/5 border border-primary/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  🌙 O evento termina no dia seguinte.
+                </p>
+              )}
+              {startTime && endTime && eventDurationHours < 0.5 && !crossesMidnight && (
+                <p className="text-error text-xs">Duração mínima de 30 minutos.</p>
               )}
             </motion.div>
           )}
@@ -279,9 +393,126 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
             </motion.div>
           )}
 
-          {/* ── STEP 3: Resumo ── */}
+          {/* ── STEP 3: Briefing ── */}
           {step === 3 && (
             <motion.div key="step3"
+              initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
+              className="space-y-6">
+
+              <div>
+                <h2 className="font-display text-2xl font-bold text-primary">Briefing do evento</h2>
+                <p className="text-sm text-on-surface-variant mt-1">Informações importantes para os profissionais.</p>
+              </div>
+
+              {/* Uniforme */}
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">
+                  👔 Vestimenta / Uniforme
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { val: 'provided', label: 'Fornecido', desc: 'A organização fornece' },
+                    { val: 'own',      label: 'Próprio',   desc: 'Profissional usa o seu' },
+                    { val: 'none',     label: 'Livre',     desc: 'Sem exigência específica' },
+                  ].map(opt => (
+                    <button key={opt.val} type="button"
+                      onClick={() => setUniformType(opt.val as any)}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${
+                        uniformType === opt.val ? 'border-primary bg-primary/5' : 'border-outline-variant hover:border-primary/40'
+                      }`}>
+                      <p className={`text-xs font-bold ${uniformType === opt.val ? 'text-primary' : 'text-on-surface'}`}>{opt.label}</p>
+                      <p className="text-[10px] text-on-surface-variant mt-0.5 leading-tight">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+                {uniformType !== 'none' && (
+                  <textarea value={uniformDetails} onChange={e => setUniformDetails(e.target.value)}
+                    placeholder={uniformType === 'provided' ? 'Ex: Camisa branca + calça preta serão entregues na entrada' : 'Ex: Traje social escuro, sapato fechado'}
+                    rows={2} className={`${IC} resize-none`} />
+                )}
+              </div>
+
+              {/* Alimentação */}
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">
+                  🍽️ Alimentação
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { val: 'provided', label: 'Fornecida', desc: 'Refeição inclusa no evento' },
+                    { val: 'own',      label: 'Por conta',  desc: 'Profissional cuida do próprio' },
+                    { val: 'none',     label: 'Não definido', desc: 'A combinar' },
+                  ].map(opt => (
+                    <button key={opt.val} type="button"
+                      onClick={() => setMealType(opt.val as any)}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${
+                        mealType === opt.val ? 'border-primary bg-primary/5' : 'border-outline-variant hover:border-primary/40'
+                      }`}>
+                      <p className={`text-xs font-bold ${mealType === opt.val ? 'text-primary' : 'text-on-surface'}`}>{opt.label}</p>
+                      <p className="text-[10px] text-on-surface-variant mt-0.5 leading-tight">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+                {mealType !== 'none' && (
+                  <textarea value={mealDetails} onChange={e => setMealDetails(e.target.value)}
+                    placeholder={mealType === 'provided' ? 'Ex: Jantar servido às 21h na copa dos funcionários' : 'Ex: Há lanchonetes próximas ao local'}
+                    rows={2} className={`${IC} resize-none`} />
+                )}
+              </div>
+
+              {/* Ponto de encontro */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wide">
+                    📍 Ponto de encontro
+                  </label>
+                  <button type="button" onClick={() => setHasMeetingPoint(!hasMeetingPoint)}
+                    className={`w-11 h-6 rounded-full transition-colors relative ${hasMeetingPoint ? 'bg-primary' : 'bg-outline-variant'}`}>
+                    <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${hasMeetingPoint ? 'left-6' : 'left-1'}`} />
+                  </button>
+                </div>
+                {hasMeetingPoint && (
+                  <textarea value={meetingPoint} onChange={e => setMeetingPoint(e.target.value)}
+                    placeholder="Ex: Entrada principal do Espaço Villa-Lobos, portão B, das 17h às 18h"
+                    rows={2} className={`${IC} resize-none`} />
+                )}
+              </div>
+
+              {/* Transporte */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wide">
+                    🚌 Transporte disponibilizado
+                  </label>
+                  <button type="button" onClick={() => setHasTransport(!hasTransport)}
+                    className={`w-11 h-6 rounded-full transition-colors relative ${hasTransport ? 'bg-primary' : 'bg-outline-variant'}`}>
+                    <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${hasTransport ? 'left-6' : 'left-1'}`} />
+                  </button>
+                </div>
+                {hasTransport && (
+                  <textarea value={transportDetails} onChange={e => setTransportDetails(e.target.value)}
+                    placeholder="Ex: Van saindo da Estação Consolação às 18h30. Confirmar presença até 24h antes."
+                    rows={2} className={`${IC} resize-none`} />
+                )}
+              </div>
+
+              {/* Observações gerais */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">
+                  📝 Observações gerais (opcional)
+                </label>
+                <textarea value={extraNotes} onChange={e => setExtraNotes(e.target.value)}
+                  placeholder="Qualquer informação adicional que os profissionais precisem saber..."
+                  rows={3} maxLength={500} className={`${IC} resize-none`} />
+                <p className="text-[11px] text-on-surface-variant text-right">{extraNotes.length}/500</p>
+              </div>
+
+            </motion.div>
+          )}
+
+          {/* ── STEP 4: Resumo ── */}
+          {step === 4 && (
+            <motion.div key="step4"
               initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
               className="space-y-5">
               <div>
@@ -297,7 +528,7 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
                 <div className="p-4 flex gap-6">
                   <div>
                     <p className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wide">Local</p>
-                    <p className="text-sm font-semibold text-on-surface mt-0.5">{locationName}</p>
+                    <p className="text-sm font-semibold text-on-surface mt-0.5">{geoResult?.formatted ?? locationName}</p>
                   </div>
                 </div>
                 <div className="p-4 flex gap-6">
@@ -309,7 +540,10 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
                   </div>
                   <div>
                     <p className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wide">Horário</p>
-                    <p className="text-sm font-semibold text-on-surface mt-0.5">{startTime} – {endTime}</p>
+                    <p className="text-sm font-semibold text-on-surface mt-0.5">
+                      {startTime} – {endTime}
+                      {crossesMidnight && <span className="text-xs text-primary ml-1">(dia seguinte)</span>}
+                    </p>
                   </div>
                 </div>
                 <div className="p-4 space-y-2">
@@ -325,6 +559,49 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
                     <span className="font-mono text-sm font-bold text-primary">{totalProfessionals} profissionais</span>
                   </div>
                 </div>
+
+                {/* Briefing no resumo */}
+                {(uniformType !== 'none' || mealType !== 'none' || hasMeetingPoint || hasTransport || extraNotes) && (
+                  <div className="p-4 space-y-2">
+                    <p className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wide">Briefing</p>
+                    {uniformType !== 'none' && (
+                      <div className="flex gap-2 text-xs">
+                        <span>👔</span>
+                        <span className="text-on-surface">
+                          {uniformType === 'provided' ? 'Uniforme fornecido' : 'Roupa própria'}
+                          {uniformDetails && ` — ${uniformDetails}`}
+                        </span>
+                      </div>
+                    )}
+                    {mealType !== 'none' && (
+                      <div className="flex gap-2 text-xs">
+                        <span>🍽️</span>
+                        <span className="text-on-surface">
+                          {mealType === 'provided' ? 'Alimentação fornecida' : 'Alimentação por conta'}
+                          {mealDetails && ` — ${mealDetails}`}
+                        </span>
+                      </div>
+                    )}
+                    {hasMeetingPoint && meetingPoint && (
+                      <div className="flex gap-2 text-xs">
+                        <span>📍</span>
+                        <span className="text-on-surface">{meetingPoint}</span>
+                      </div>
+                    )}
+                    {hasTransport && transportDetails && (
+                      <div className="flex gap-2 text-xs">
+                        <span>🚌</span>
+                        <span className="text-on-surface">{transportDetails}</span>
+                      </div>
+                    )}
+                    {extraNotes && (
+                      <div className="flex gap-2 text-xs">
+                        <span>📝</span>
+                        <span className="text-on-surface">{extraNotes}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {error && (
@@ -339,17 +616,17 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
       {/* Footer buttons */}
       <div className="sticky bottom-0 bg-white border-t border-outline-variant/30 px-6 py-4 flex gap-3">
         {step > 1 && (
-          <button onClick={() => setStep(s => (s - 1) as 1 | 2 | 3)}
+          <button onClick={() => setStep(s => (s - 1) as 1|2|3|4)}
             className="flex-1 py-3.5 border border-outline-variant text-on-surface rounded-xl font-semibold text-sm">
             Voltar
           </button>
         )}
-        {step < 3 ? (
+        {step < 4 ? (
           <button
-            onClick={() => setStep(s => (s + 1) as 1 | 2 | 3)}
-            disabled={step === 1 ? !step1Valid : !step2Valid}
+            onClick={() => setStep(s => (s + 1) as 1|2|3|4)}
+            disabled={step === 1 ? !step1Valid : step === 2 ? !step2Valid : false}
             className="flex-1 bg-primary text-on-primary py-3.5 rounded-xl font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition-all">
-            Continuar
+            {step === 3 ? 'Revisar' : 'Continuar'}
           </button>
         ) : (
           <button onClick={handleSubmit} disabled={loading}
@@ -363,6 +640,7 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
 }
 
 const inputClass = "w-full px-4 py-3 rounded-xl border border-outline-variant bg-surface-container-low focus:outline-none focus:ring-2 focus:ring-primary/40 text-sm";
+const IC = inputClass;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

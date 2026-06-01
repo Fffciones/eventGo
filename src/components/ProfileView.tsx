@@ -1,42 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  CheckCircle2, 
-  MapPin, 
-  Calendar, 
-  CreditCard, 
-  ShieldCheck, 
-  HelpCircle, 
-  ChevronRight, 
-  Rocket, 
-  PlusCircle, 
-  Star, 
+import {
+  CheckCircle2,
+  MapPin,
+  Calendar,
+  CreditCard,
+  ShieldCheck,
+  HelpCircle,
+  ChevronRight,
+  Rocket,
+  PlusCircle,
+  Star,
   X,
   Plus,
   Trash2,
   Lock,
-  Heart
+  Heart,
+  Camera,
+  Loader2
 } from 'lucide-react';
+import { useAvatarUpload } from '../hooks/useAvatarUpload';
 import { ClientEvent, Professional } from '../types';
-import { CLIENT_AVATARS, RICARDO_PROFILE } from '../data';
-import type { UserProfile } from '../hooks/useProfile';
+import type { UserProfile, ProfileEvent, ProfileFavorite } from '../hooks/useProfile';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  GARCOM: 'Garçom', DJ: 'DJ', SEGURANCA: 'Segurança',
+  FAXINEIRO: 'Limpeza', FOTOGRAFO: 'Fotógrafo',
+  MESTRE_CERIMONIAS: 'Mestre de Cerimônias',
+  PRODUTOR: 'Produtor', CONTROLADOR_ACESSO: 'Controle de Acesso',
+};
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  SCHEDULED:  { label: 'Agendado',   color: 'bg-amber-50 text-amber-700' },
+  ACTIVE:     { label: 'Ativo',      color: 'bg-emerald-50 text-emerald-700' },
+  COMPLETED:  { label: 'Concluído',  color: 'bg-slate-100 text-slate-600' },
+  CANCELLED:  { label: 'Cancelado',  color: 'bg-red-50 text-red-600' },
+};
 
 interface ProfileViewProps {
   events: ClientEvent[];
+  dbEvents?: ProfileEvent[];
+  dbFavorites?: ProfileFavorite[];
+  avgRating?: number | null;
   onAddEvent: (newEvent: ClientEvent) => void;
   favoritePros: Professional[];
   onToggleFavorite: (id: string) => void;
   onSelectPro: (id: string) => void;
   profile?: UserProfile | null;
   onSignOut?: () => void;
+  onCreateEvent?: () => void;
 }
 
-export default function ProfileView({ events, onAddEvent, favoritePros, onToggleFavorite, onSelectPro, profile, onSignOut }: ProfileViewProps) {
+export default function ProfileView({
+  events, dbEvents = [], dbFavorites = [], avgRating,
+  onAddEvent, favoritePros, onToggleFavorite, onSelectPro,
+  profile, onSignOut, onCreateEvent
+}: ProfileViewProps) {
   const [newEventModal, setNewEventModal] = useState(false);
   const [eventName, setEventName] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [eventLoc, setEventLoc] = useState('');
   const [proCount, setProCount] = useState(3);
+  const [localAvatar, setLocalAvatar] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { upload, uploading, error: uploadError } = useAvatarUpload(profile?.id);
   
   // Settings detail simulate views
   const [settingModal, setSettingModal] = useState<'payment' | 'verify' | 'help' | null>(null);
@@ -71,11 +98,12 @@ export default function ProfileView({ events, onAddEvent, favoritePros, onToggle
         {/* Profile Card Info */}
         <div className="md:col-span-2 bg-white p-5 rounded-2xl border border-outline-variant/30 flex flex-col md:flex-row gap-5 items-start md:items-center shadow-sm">
           <div className="relative">
-            {profile?.avatar_url ? (
+            {/* Avatar */}
+            {(localAvatar || profile?.avatar_url) ? (
               <img
-                alt={profile.full_name}
+                alt={profile?.full_name ?? 'Avatar'}
                 className="w-24 h-24 rounded-2xl object-cover border border-outline-variant/20 shadow-inner"
-                src={profile.avatar_url}
+                src={localAvatar ?? profile?.avatar_url ?? ''}
               />
             ) : (
               <div className="w-24 h-24 rounded-2xl bg-primary/10 border border-outline-variant/20 flex items-center justify-center">
@@ -84,33 +112,73 @@ export default function ProfileView({ events, onAddEvent, favoritePros, onToggle
                 </span>
               </div>
             )}
-            <div className="absolute -bottom-2 -right-2 bg-primary text-on-primary px-2 py-1 rounded-lg flex items-center gap-1 shadow-md">
-              <CheckCircle2 className="w-3.5 h-3.5 fill-on-primary text-primary" />
-              <span className="font-mono font-bold text-[9px] tracking-wider uppercase">Verificado</span>
-            </div>
+
+            {/* Botão de câmera */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="absolute -bottom-2 -right-2 w-8 h-8 bg-primary text-on-primary rounded-full flex items-center justify-center shadow-md hover:bg-primary/90 active:scale-95 transition-all border-2 border-white"
+              title="Alterar foto"
+            >
+              {uploading
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Camera className="w-3.5 h-3.5" />
+              }
+            </button>
+
+            {/* Input oculto — aceita câmera no mobile */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="user"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                // preview imediato
+                setLocalAvatar(URL.createObjectURL(file));
+                const url = await upload(file);
+                if (url) setLocalAvatar(url);
+                e.target.value = '';
+              }}
+            />
           </div>
 
           <div className="flex-1 space-y-1">
             <h1 className="font-display font-extrabold text-2xl text-primary leading-tight">{profile?.full_name ?? '—'}</h1>
             <p className="text-xs font-semibold text-on-surface-variant">{profile?.email}</p>
+            {uploadError && (
+              <p className="text-xs text-error bg-error-container px-2 py-1 rounded-lg">{uploadError}</p>
+            )}
             
             <div className="flex gap-4 pt-2">
               <div className="flex flex-col">
                 <span className="font-mono font-bold text-[9px] text-outline uppercase tracking-wide">Rating como Cliente</span>
-                <div className="flex items-center gap-1">
-                  <span className="font-display font-bold text-base text-tertiary">4.9</span>
-                  <div className="flex text-amber-500 gap-[2px]">
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Star key={s} className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                    ))}
+                {avgRating ? (
+                  <div className="flex items-center gap-1">
+                    <span className="font-display font-bold text-base text-tertiary">{avgRating}</span>
+                    <div className="flex text-amber-500 gap-[2px]">
+                      {[1,2,3,4,5].map(s => (
+                        <Star key={s} className={`w-3.5 h-3.5 ${s <= Math.round(avgRating) ? 'fill-amber-500 text-amber-500' : 'text-slate-200'}`} />
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <span className="text-xs text-on-surface-variant mt-0.5">Sem avaliações ainda</span>
+                )}
               </div>
+              {profile?.phone && (
+                <div className="flex flex-col">
+                  <span className="font-mono font-bold text-[9px] text-outline uppercase tracking-wide">Telefone</span>
+                  <span className="text-sm font-semibold text-on-surface">{profile.phone}</span>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="w-full md:w-auto bg-primary-container/10 p-4 rounded-2xl border border-primary-container/20 text-center shrink-0">
-            <span className="font-display text-4xl font-extrabold text-primary block leading-none">{events.length + 22}</span>
+            <span className="font-display text-4xl font-extrabold text-primary block leading-none">{dbEvents.length}</span>
             <span className="font-mono text-[9px] font-bold text-primary-container uppercase tracking-wide block mt-1">Eventos Organizados</span>
           </div>
         </div>
@@ -124,8 +192,8 @@ export default function ProfileView({ events, onAddEvent, favoritePros, onToggle
             <h3 className="font-display font-bold text-lg mb-1 leading-tight">Pronto para o próximo?</h3>
             <p className="text-xs opacity-80 leading-normal">Encontre os melhores profissionais para sua festa ou evento corporativo hoje.</p>
           </div>
-          <button 
-            onClick={() => setNewEventModal(true)}
+          <button
+            onClick={() => onCreateEvent?.()}
             className="mt-4 w-full py-3 bg-white text-primary font-bold rounded-xl hover:bg-slate-50 transition-all flex items-center justify-center gap-1.5 active:scale-95 text-xs shadow-md"
           >
             <PlusCircle className="w-4 h-4" />
@@ -150,83 +218,91 @@ export default function ProfileView({ events, onAddEvent, favoritePros, onToggle
           </div>
           
           <div className="space-y-3">
-            {events.map((ev) => (
-              <div 
-                key={ev.id}
-                className="bg-white p-3.5 rounded-2xl border border-outline-variant/30 flex flex-col md:flex-row gap-4 hover:border-primary/40 transition-colors cursor-pointer group shadow-sm"
-              >
-                <div className="w-full md:w-36 h-24 rounded-xl overflow-hidden shrink-0 bg-slate-100 border">
-                  <img 
-                    src={ev.image} 
-                    alt={ev.name} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 select-none" 
-                  />
-                </div>
-                <div className="flex-1 flex flex-col justify-between">
-                  <div className="flex justify-between items-start gap-4 text-left">
-                    <div>
-                      <h4 className="font-display font-bold text-base text-tertiary">{ev.name}</h4>
-                      <p className="text-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
-                        <Calendar className="w-3.5 h-3.5" />
-                        <span>{ev.date} • {ev.location}</span>
-                      </p>
-                    </div>
-                    <div className="bg-secondary-container/20 text-on-secondary-container font-mono text-[9px] font-bold px-2 py-0.5 rounded border-l-2 border-secondary uppercase shrink-0">
-                      {ev.status}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-50">
-                    <span className="text-[11px] text-on-surface-variant font-medium">
-                      🛠️ {ev.proCount} Profissionais contratados sob demanda
-                    </span>
-                  </div>
-                </div>
+            {dbEvents.length === 0 ? (
+              <div className="bg-white border border-outline-variant/30 rounded-2xl p-6 text-center">
+                <Calendar className="w-8 h-8 text-on-surface-variant mx-auto mb-2" />
+                <p className="text-sm font-semibold text-on-surface">Nenhum evento ainda</p>
+                <p className="text-xs text-on-surface-variant mt-1">Crie seu primeiro evento!</p>
+                <button
+                  onClick={() => onCreateEvent?.()}
+                  className="mt-3 text-xs text-primary font-semibold hover:underline"
+                >
+                  + Criar evento
+                </button>
               </div>
-            ))}
+            ) : (
+              dbEvents.map((ev) => {
+                const st = STATUS_LABELS[ev.status] ?? { label: ev.status, color: 'bg-slate-100 text-slate-600' };
+                return (
+                  <div
+                    key={ev.id}
+                    className="bg-white p-3.5 rounded-2xl border border-outline-variant/30 flex flex-col gap-2 hover:border-primary/40 transition-colors shadow-sm"
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="text-left">
+                        <h4 className="font-display font-bold text-base text-primary">{ev.name}</h4>
+                        <p className="text-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3" /> {ev.location_name}
+                        </p>
+                        <p className="text-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(ev.starts_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' })}
+                          {' · '}
+                          {new Date(ev.starts_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}
+                          {' – '}
+                          {new Date(ev.ends_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}
+                        </p>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${st.color}`}>
+                        {st.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
         {/* Favorites list Sidebar */}
         <div className="lg:col-span-4 space-y-4">
           <h2 className="font-display font-extrabold text-lg md:text-xl text-primary">Meus Favoritos</h2>
-          
-          <div className="bg-surface-container-low p-3.5 rounded-2xl space-y-2.5 border border-outline-variant/20">
-            {favoritePros.slice(0, 3).map((pro) => (
-              <div 
-                key={pro.id} 
-                className="bg-white p-3 rounded-xl flex items-center justify-between gap-3 shadow-sm border border-outline-variant/10 hover:border-primary/20 transition-all text-left"
-              >
-                <img 
-                  onClick={() => onSelectPro(pro.id)}
-                  src={pro.image} 
-                  alt={pro.name} 
-                  className="w-11 h-11 rounded-lg object-cover cursor-pointer hover:brightness-95 transition-all shadow-sm"
-                />
-                <div className="flex-1 min-w-0" onClick={() => onSelectPro(pro.id)}>
-                  <h5 className="text-[12px] font-bold text-tertiary truncate cursor-pointer hover:underline">{pro.name}</h5>
-                  <p className="text-[10px] text-on-surface-variant font-medium truncate">{pro.role}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="flex items-center gap-0.5 text-amber-500 mb-1">
-                    <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                    <span className="font-mono text-[10px] font-bold">{pro.rating}</span>
-                  </div>
-                  <button 
-                    onClick={() => onToggleFavorite(pro.id)}
-                    className="text-slate-400 hover:text-red-500 transition-colors"
-                  >
-                    <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
-                  </button>
-                </div>
-              </div>
-            ))}
 
-            <button 
-              onClick={() => onSelectPro(RICARDO_PROFILE.id)}
-              className="w-full py-2.5 bg-white text-primary font-bold text-xs hover:bg-slate-50 rounded-xl transition-all border border-dashed border-primary/20 shadow-sm"
-            >
-              Ver Lista Completa
-            </button>
+          <div className="bg-surface-container-low p-3.5 rounded-2xl space-y-2.5 border border-outline-variant/20">
+            {dbFavorites.length === 0 ? (
+              <div className="text-center py-4">
+                <Heart className="w-7 h-7 text-on-surface-variant mx-auto mb-2" />
+                <p className="text-xs text-on-surface-variant">Nenhum favorito ainda.</p>
+                <p className="text-xs text-on-surface-variant mt-1">Após eventos, favorite os profissionais que se destacaram.</p>
+              </div>
+            ) : (
+              dbFavorites.slice(0, 4).map((pro) => (
+                <div
+                  key={pro.professional_id}
+                  className="bg-white p-3 rounded-xl flex items-center gap-3 shadow-sm border border-outline-variant/10 hover:border-primary/20 transition-all"
+                >
+                  {pro.avatar_url ? (
+                    <img src={pro.avatar_url} alt={pro.full_name}
+                      className="w-11 h-11 rounded-lg object-cover shadow-sm shrink-0" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <span className="font-bold text-primary">{pro.full_name[0]}</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h5 className="text-[12px] font-bold text-primary truncate">{pro.full_name}</h5>
+                    <p className="text-[10px] text-on-surface-variant">{CATEGORY_LABELS[pro.category] ?? pro.category}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="flex items-center gap-0.5 text-amber-500">
+                      <Star className="w-3 h-3 fill-amber-500" />
+                      <span className="font-mono text-[10px] font-bold">{pro.stars}</span>
+                    </div>
+                    <p className="text-[10px] text-on-surface-variant mt-0.5">{pro.events_count} eventos</p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -309,95 +385,7 @@ export default function ProfileView({ events, onAddEvent, favoritePros, onToggle
         </div>
       </section>
 
-      {/* CREATE EVENT MODAL */}
-      <AnimatePresence>
-        {newEventModal && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.92, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 shadow-2xl border border-outline-variant max-w-md w-full relative"
-            >
-              <button 
-                onClick={() => setNewEventModal(false)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-full"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <h3 className="font-display font-extrabold text-xl text-primary text-left mb-1.5">Criar Novo Evento</h3>
-              <p className="text-xs text-on-surface-variant text-left mb-4">Adicione um novo registro no seu histórico para planejar as contratações táticas.</p>
-
-              <form onSubmit={handleCreateEvent} className="space-y-4 text-left">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">NOME DO EVENTO</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: Cerimônia de Casamento Luxo, Festa de 30 Anos..." 
-                    value={eventName}
-                    onChange={(e) => setEventName(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-outline-variant focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">DATA</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: 15 de Outembro" 
-                      value={eventDate}
-                      onChange={(e) => setEventDate(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-outline-variant focus:ring-1 focus:ring-primary focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">LOCAL</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: Mansão Jardim América, SP" 
-                      value={eventLoc}
-                      onChange={(e) => setEventLoc(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-outline-variant focus:ring-1 focus:ring-primary focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">ESTIMATIVA DE STAFF REQUERIDO</label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    value={proCount}
-                    onChange={(e) => setProCount(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-outline-variant focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
-
-                <div className="pt-2 flex gap-2">
-                  <button 
-                    type="button" 
-                    onClick={() => setNewEventModal(false)}
-                    className="flex-1 py-3 border border-outline-variant text-[#1a1b1e] font-semibold text-xs rounded-xl hover:bg-slate-50"
-                  >
-                    Mudar de Ideia
-                  </button>
-                  <button 
-                    type="submit"
-                    className="flex-1 py-3 bg-primary text-on-primary font-bold text-xs rounded-xl shadow-md hover:brightness-110 active:scale-95"
-                  >
-                    Simular Evento
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* Modal de criação de evento removido — usar CreateEventScreen via onCreateEvent */}
 
       {/* SETTINGS DETAILS MODALS */}
       <AnimatePresence>

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { MapPin, Eye, EyeOff, ArrowLeft, User, Briefcase, Loader2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
+import ProfessionalSignupScreen from './ProfessionalSignupScreen';
 
 type AuthMode = 'landing' | 'login' | 'signup-type' | 'signup-client' | 'signup-professional';
 
@@ -89,6 +90,16 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     MESTRE_CERIMONIAS: 'Mestre de Cerimônias',
     PRODUTOR: 'Produtor', CONTROLADOR_ACESSO: 'Controle de Acesso',
   };
+
+  // Redireciona para tela dedicada de cadastro profissional
+  if (mode === 'signup-professional') {
+    return (
+      <ProfessionalSignupScreen
+        onBack={() => setMode('signup-type')}
+        onSuccess={() => { setSuccess(true); setTimeout(onAuthenticated, 2000); }}
+      />
+    );
+  }
 
   if (success) {
     return (

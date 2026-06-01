@@ -40,7 +40,7 @@ import ProfileView from './components/ProfileView';
 export default function App() {
   const { user, loading, signOut } = useAuth();
   const { unreadCount } = useNotifications(user?.id);
-  const { profile } = useProfile(user?.id);
+  const { profile, events: dbEvents, favorites: dbFavorites, avgRating } = useProfile(user?.id);
 
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const saved = localStorage.getItem('eventgo_active_tab');
@@ -52,7 +52,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_BOOKINGS;
   });
 
-  const { events: dbEvents, createEvent } = useEvents(profile?.client_id);
+  const { createEvent } = useEvents(profile?.client_id);
   const [events, setEvents] = useState<ClientEvent[]>(() => {
     const saved = localStorage.getItem('eventgo_events');
     return saved ? JSON.parse(saved) : INITIAL_CLIENT_EVENTS;
@@ -178,11 +178,19 @@ export default function App() {
               }}
               className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-fixed cursor-pointer transition-transform hover:scale-105 active:scale-95 shadow-sm"
             >
-              <img 
-                alt="Rodrigo Silva thumbnail portrait controller" 
-                className="w-full h-full object-cover" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDaUMWEk5RR5cN45ze6awCxupOd_haLenYDV_07jaLAXx6CLXQDFMfrSdbAoPW85BULl4cHGbwD6kGnbdjOziYdkq4A69CUxyb88jK03BHY97p1x2p4-M7FlTVnCSYEvYlf3UMTfwQAPJIfx5gOByHHAR81N0ZQ5HQ3mE1vlJNa8XN1BVPsIAq7eFAa220QzsiEHKV9OESrhlW-Zhg1-6XB8VdNrhEd9HoiVAwsMVoPpf0JDwbbJ9rGMijkVIKdW31d0ooHujr20w" 
-              />
+              {profile?.avatar_url ? (
+                <img
+                  alt={profile.full_name}
+                  className="w-full h-full object-cover"
+                  src={profile.avatar_url}
+                />
+              ) : (
+                <div className="w-full h-full bg-primary/10 flex items-center justify-center">
+                  <span className="font-display font-bold text-primary text-sm">
+                    {(profile?.full_name ?? user?.email ?? 'U')[0].toUpperCase()}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </header>
@@ -210,34 +218,34 @@ export default function App() {
               />
             )}
             {activeTab === 'bookings' && (
-              <BookingsView 
-                bookings={bookings} 
-                activeEvent={activeEvent} 
-                onAddBooking={handleAddBooking}
-                onSelectPro={handleSelectPro}
+              <BookingsView
+                profile={profile}
                 onNavigate={(tab) => {
                   setSelectedProId(null);
                   setActiveTab(tab);
                 }}
+                onCreateEvent={() => setShowCreateEvent(true)}
               />
             )}
             {activeTab === 'favorites' && (
-              <FavoritesView 
-                favoritePros={favoritePros} 
-                onToggleFavorite={handleToggleFavorite}
-                selectedProId={selectedProId}
-                onSelectPro={handleSelectPro}
+              <FavoritesView
+                profile={profile}
+                onCreateEvent={() => setShowCreateEvent(true)}
               />
             )}
             {activeTab === 'profile' && (
               <ProfileView
                 events={events}
+                dbEvents={dbEvents}
+                dbFavorites={dbFavorites}
+                avgRating={avgRating}
                 onAddEvent={handleAddEvent}
                 favoritePros={favoritePros}
                 onToggleFavorite={handleToggleFavorite}
                 onSelectPro={handleSelectPro}
                 profile={profile}
                 onSignOut={signOut}
+                onCreateEvent={() => setShowCreateEvent(true)}
               />
             )}
           </motion.div>

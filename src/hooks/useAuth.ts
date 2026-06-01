@@ -23,14 +23,19 @@ export function useAuth() {
         const meta = session.user.user_metadata;
         const uid  = session.user.id;
 
-        if (meta?.user_type === 'CLIENT') {
+        // fallback: se não tiver user_type no metadata, assume CLIENT
+        const userType = meta?.user_type ?? 'CLIENT';
+
+        if (userType === 'CLIENT') {
           supabase.from('clients')
             .select('id').eq('user_id', uid).single()
             .then(({ data }) => {
               if (!data) {
+                // documento único por usuário usando parte do UUID
+                const uniqueDoc = uid.replace(/-/g, '').slice(0, 11);
                 supabase.from('clients').insert({
                   user_id: uid,
-                  document: meta?.document ?? '000.000.000-00',
+                  document: uniqueDoc,
                   is_company: false,
                   credit_balance: 0,
                   credit_limit: 0,

@@ -1,440 +1,436 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Pin, 
-  MapPin, 
-  PlusCircle, 
-  Star, 
-  Navigation, 
-  CheckCircle, 
-  Sliders, 
-  Maximize2,
-  X,
-  Volume2,
-  Shield,
-  Utensils,
-  Sparkles,
-  Users
+import {
+  MapPin, Calendar, Clock, Users, PlusCircle,
+  Utensils, Headphones, Shield, Sparkles, Camera, Mic,
+  Settings, UserCheck, Loader2, CheckCircle, AlertCircle,
+  Navigation, ArrowLeft, ChevronRight, RefreshCw
 } from 'lucide-react';
-import { BookingTeam, ClientEvent } from '../types';
-import { MAP_MINI_PREVIEW } from '../data';
+import { supabase } from '../lib/supabase';
+import type { UserProfile } from '../hooks/useProfile';
 
 interface BookingsViewProps {
-  bookings: BookingTeam[];
-  activeEvent: ClientEvent;
-  onAddBooking: (newBooking: BookingTeam) => void;
-  onSelectPro: (proId: string) => void;
+  profile?: UserProfile | null;
   onNavigate: (tab: 'home' | 'bookings' | 'favorites' | 'profile') => void;
+  onCreateEvent: () => void;
 }
 
-export default function BookingsView({ bookings, activeEvent, onAddBooking, onSelectPro, onNavigate }: BookingsViewProps) {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [newTeamName, setNewTeamName] = useState('');
-  const [newTeamStatus, setNewTeamStatus] = useState<BookingTeam['status']>('EM SERVIÇO');
-  const [newTeamConfirmed, setNewTeamConfirmed] = useState(4);
-  const [newTeamReserve, setNewTeamReserve] = useState(1);
-  const [selectedMapPreview, setSelectedMapPreview] = useState<string | null>(null);
+interface DbEvent {
+  id: string;
+  name: string;
+  location_name: string;
+  starts_at: string;
+  ends_at: string;
+  status: string;
+  booking_count?: number;
+  confirmed_count?: number;
+}
 
-  const handleAddNewTeam = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTeamName.trim()) return;
+interface DbBooking {
+  id: string;
+  category: string;
+  quantity: number;
+  status: string;
+  multiplier_type: string;
+  total_amount: number;
+  booking_professionals: DbBookingPro[];
+}
 
-    const newTeam: BookingTeam = {
-      id: `team-${Date.now()}`,
-      name: newTeamName,
-      status: newTeamStatus,
-      countConfirmed: newTeamConfirmed,
-      countReserve: newTeamReserve,
-      rating: 4.9,
-      members: ['https://lh3.googleusercontent.com/aida-public/AB6AXuBBatOOGcNmH7uOEaKdULjeu1_1XcIXwkwKNRJFS_5cSHvaPIz02NsuKJHMTVnmiJPSOkWPKvWfeIFBASMM06HbUYroMrimTDDW78L04vy6QSEWuY0ODo0azuka159ioZNsfUHCnRYFJcNS5mPmZ7GM1e3Lhi_xbaSmtuKh4VKbul0HWheixVsqmaUmqYwGpMG8WYd2t8RPFywQCIXhMv7XMwv7_edaHXJNzK5fLArF-Py0Xb_SzC5HnwD72ZvaAopGKnNP4m90ZQ']
-    };
+interface DbBookingPro {
+  id: string;
+  professional_id: string;
+  status: string;
+  amount: number;
+  gps_active: boolean;
+  checkin_at: string | null;
+  checkout_at: string | null;
+  early_minutes: number | null;
+  professionals: { users: { full_name: string; avatar_url: string | null } };
+}
 
-    onAddBooking(newTeam);
-    setNewTeamName('');
-    setModalOpen(false);
+// ── Mapeamentos ────────────────────────────────────────────────────────
+const CATEGORY_MAP: Record<string, { label: string; icon: any; color: string }> = {
+  GARCOM:             { label: 'Garçom',            icon: Utensils,   color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  DJ:                 { label: 'DJ',                icon: Headphones, color: 'bg-purple-50 text-purple-700 border-purple-200' },
+  SEGURANCA:          { label: 'Segurança',         icon: Shield,     color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  FAXINEIRO:          { label: 'Limpeza',           icon: Sparkles,   color: 'bg-green-50 text-green-700 border-green-200' },
+  FOTOGRAFO:          { label: 'Fotógrafo',         icon: Camera,     color: 'bg-pink-50 text-pink-700 border-pink-200' },
+  MESTRE_CERIMONIAS:  { label: 'Mestre de Cerimôn.',icon: Mic,        color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  PRODUTOR:           { label: 'Produtor',          icon: Settings,   color: 'bg-orange-50 text-orange-700 border-orange-200' },
+  CONTROLADOR_ACESSO: { label: 'Controle de Acesso',icon: UserCheck,  color: 'bg-teal-50 text-teal-700 border-teal-200' },
+};
+
+const EVENT_STATUS: Record<string, { label: string; color: string; dot: string }> = {
+  SCHEDULED:   { label: 'Agendado',    color: 'bg-amber-50 text-amber-700 border-amber-200',     dot: 'bg-amber-400' },
+  ACTIVE:      { label: 'Ativo',       color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500 animate-pulse' },
+  COMPLETED:   { label: 'Concluído',   color: 'bg-slate-50 text-slate-600 border-slate-200',      dot: 'bg-slate-400' },
+  CANCELLED:   { label: 'Cancelado',   color: 'bg-red-50 text-red-600 border-red-200',            dot: 'bg-red-400' },
+};
+
+const BOOKING_STATUS: Record<string, { label: string; color: string; dot: string }> = {
+  PENDING:     { label: 'Aguardando',   color: 'bg-amber-50 text-amber-700 border-amber-200',       dot: 'bg-amber-400' },
+  CONFIRMED:   { label: 'Confirmado',   color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  IN_PROGRESS: { label: 'Em andamento', color: 'bg-blue-50 text-blue-700 border-blue-200',          dot: 'bg-blue-500 animate-pulse' },
+  COMPLETED:   { label: 'Concluído',    color: 'bg-slate-50 text-slate-600 border-slate-200',       dot: 'bg-slate-400' },
+  CANCELLED:   { label: 'Cancelado',    color: 'bg-red-50 text-red-600 border-red-200',             dot: 'bg-red-400' },
+  EMERGENCY:   { label: 'Emergência',   color: 'bg-red-100 text-red-800 border-red-300',            dot: 'bg-red-600 animate-ping' },
+};
+
+const PRO_STATUS: Record<string, { label: string; color: string }> = {
+  INVITED:     { label: 'Convidado',      color: 'text-amber-600' },
+  ACCEPTED:    { label: 'Confirmado',     color: 'text-emerald-600' },
+  DECLINED:    { label: 'Recusou',        color: 'text-red-500' },
+  IN_TRANSIT:  { label: 'Em trânsito',    color: 'text-blue-600' },
+  CHECKED_IN:  { label: 'No local',       color: 'text-emerald-700' },
+  CHECKED_OUT: { label: 'Concluído',      color: 'text-slate-500' },
+  NO_SHOW:     { label: 'Não compareceu', color: 'text-red-600' },
+};
+
+export default function BookingsView({ profile, onNavigate, onCreateEvent }: BookingsViewProps) {
+  const [events, setEvents]               = useState<DbEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<DbEvent | null>(null);
+  const [bookings, setBookings]           = useState<DbBooking[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
+
+  // ── buscar lista de eventos ───────────────────────────────────────
+  useEffect(() => {
+    if (!profile?.client_id) return;
+    fetchEvents();
+  }, [profile?.client_id]);
+
+  const fetchEvents = async () => {
+    setLoadingEvents(true);
+    const { data } = await supabase
+      .from('events')
+      .select('id, name, location_name, starts_at, ends_at, status')
+      .eq('client_id', profile!.client_id!)
+      .order('starts_at', { ascending: false });
+
+    setEvents(data ?? []);
+    setLoadingEvents(false);
   };
 
-  const getStatusBadge = (status: BookingTeam['status']) => {
-    switch (status) {
-      case 'EM SERVIÇO':
-        return (
-          <div className="bg-emerald-50 border-l-2 border-emerald-600 px-2.5 py-1 text-right">
-            <span className="font-mono text-[10px] font-bold text-emerald-700">EM SERVIÇO</span>
-          </div>
-        );
-      case 'EM TRÂNSITO':
-        return (
-          <div className="bg-blue-50 border-l-2 border-primary-container px-2.5 py-1 text-right">
-            <span className="font-mono text-[10px] font-bold text-primary-container">EM TRÂNSITO</span>
-          </div>
-        );
-      case 'STANDBY':
-        return (
-          <div className="bg-slate-100 border-l-2 border-outline px-2.5 py-1 text-right">
-            <span className="font-mono text-[10px] font-bold text-outline">STANDBY</span>
-          </div>
-        );
-      case 'SETUP':
-        return (
-          <div className="bg-amber-50 border-l-2 border-amber-600 px-2.5 py-1 text-right">
-            <span className="font-mono text-[10px] font-bold text-amber-700">CONFIGURAÇÃO</span>
-          </div>
-        );
-      default:
-        return null;
-    }
+  // ── buscar bookings do evento selecionado + realtime ─────────────
+  useEffect(() => {
+    if (!selectedEvent) return;
+    fetchBookings();
+
+    const channel = supabase
+      .channel(`bookings:${selectedEvent.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_professionals' },
+        () => fetchBookings())
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'bookings',
+        filter: `event_id=eq.${selectedEvent.id}`,
+      }, () => fetchBookings())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedEvent?.id]);
+
+  const fetchBookings = async () => {
+    setLoadingBookings(true);
+    const { data } = await supabase
+      .from('bookings')
+      .select(`
+        id, category, quantity, status, multiplier_type, total_amount,
+        booking_professionals (
+          id, professional_id, status, amount, gps_active,
+          checkin_at, checkout_at, early_minutes,
+          professionals ( users ( full_name, avatar_url ) )
+        )
+      `)
+      .eq('event_id', selectedEvent!.id);
+
+    setBookings((data as any) ?? []);
+    setLoadingBookings(false);
   };
+
+  const totalConfirmed = bookings.reduce((sum, b) =>
+    sum + (b.booking_professionals?.filter(p =>
+      ['ACCEPTED','IN_TRANSIT','CHECKED_IN','CHECKED_OUT'].includes(p.status)
+    ).length ?? 0), 0
+  );
+  const totalRequested = bookings.reduce((sum, b) => sum + b.quantity, 0);
+
+  // ════════════════════════════════════════════════════════════════
+  // VIEW 1 — LISTA DE EVENTOS
+  // ════════════════════════════════════════════════════════════════
+  if (!selectedEvent) {
+    return (
+      <main className="px-4 md:px-6 pt-4 pb-24 max-w-3xl mx-auto space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="font-display font-extrabold text-2xl text-primary">Meus Eventos</h1>
+            <p className="text-xs text-on-surface-variant mt-0.5">Selecione um evento para ver a equipe.</p>
+          </div>
+          <button
+            onClick={onCreateEvent}
+            className="flex items-center gap-1.5 bg-primary text-on-primary text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm active:scale-[0.98] transition-all"
+          >
+            <PlusCircle className="w-4 h-4" /> Novo evento
+          </button>
+        </div>
+
+        {loadingEvents ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+          </div>
+        ) : events.length === 0 ? (
+          <div className="bg-white border border-outline-variant/30 rounded-2xl p-10 text-center space-y-3">
+            <Calendar className="w-10 h-10 text-on-surface-variant mx-auto" />
+            <p className="font-display text-lg font-bold text-primary">Nenhum evento ainda</p>
+            <p className="text-sm text-on-surface-variant">Crie seu primeiro evento para montar sua equipe.</p>
+            <button
+              onClick={onCreateEvent}
+              className="mt-2 flex items-center gap-2 bg-primary text-on-primary font-semibold px-5 py-3 rounded-xl shadow-md mx-auto active:scale-[0.98] transition-all text-sm"
+            >
+              <PlusCircle className="w-4 h-4" /> Criar evento
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {events.map((ev, idx) => {
+              const st = EVENT_STATUS[ev.status] ?? EVENT_STATUS.SCHEDULED;
+              const startDate = new Date(ev.starts_at);
+              const endDate   = new Date(ev.ends_at);
+
+              return (
+                <motion.button
+                  key={ev.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  onClick={() => setSelectedEvent(ev)}
+                  className="w-full bg-white border border-outline-variant/30 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-primary/30 transition-all text-left group"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${st.color}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+                          {st.label}
+                        </span>
+                      </div>
+                      <h3 className="font-display font-bold text-lg text-primary truncate group-hover:underline">
+                        {ev.name}
+                      </h3>
+                      <div className="flex flex-col gap-1 mt-2">
+                        <p className="text-xs text-on-surface-variant flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 shrink-0" />
+                          {ev.location_name}
+                        </p>
+                        <p className="text-xs text-on-surface-variant flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 shrink-0" />
+                          {startDate.toLocaleDateString('pt-BR', { weekday:'short', day:'2-digit', month:'short', year:'numeric' })}
+                        </p>
+                        <p className="text-xs text-on-surface-variant flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          {startDate.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}
+                          {' – '}
+                          {endDate.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-on-surface-variant shrink-0 mt-1 group-hover:text-primary transition-colors" />
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+        )}
+      </main>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // VIEW 2 — DETALHE DO EVENTO (bookings)
+  // ════════════════════════════════════════════════════════════════
+  const evStatus = EVENT_STATUS[selectedEvent.status] ?? EVENT_STATUS.SCHEDULED;
 
   return (
-    <main className="px-margin-mobile mt-6 max-w-5xl mx-auto space-y-6 pb-12 text-left">
-      {/* Event Summary Section */}
-      <section className="bg-white p-6 rounded-2xl shadow-sm border border-outline-variant/30">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="space-y-1">
-            <span className="font-mono text-xs font-bold uppercase tracking-wider text-secondary mb-1 block">Evento Ativo</span>
-            <h1 className="font-display text-2xl md:text-3xl font-extrabold text-primary leading-tight">{activeEvent.name}</h1>
-            <div className="flex items-center gap-1.5 text-on-surface-variant text-xs">
-              <MapPin className="text-secondary w-4 h-4" />
-              {activeEvent.location}
-            </div>
-          </div>
-          <div className="bg-primary-fixed text-on-primary-fixed px-4 py-3 rounded-xl flex items-center gap-4 shadow-sm self-start md:self-auto">
-            <div className="text-center">
-              <p className="font-mono text-[9px] font-bold tracking-widest text-[#04006d]/70 uppercase">TOTAL</p>
-              <p className="font-display text-2xl font-bold text-[#04006d]">{activeEvent.proCount}</p>
-            </div>
-            <div className="w-px h-8 bg-[#04006d]/20" />
-            <p className="text-xs font-semibold leading-tight">Profissionais<br />Confirmados</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Team Management Head Section */}
-      <section className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div>
-          <h2 className="font-display font-extrabold text-xl md:text-2xl text-on-surface">Gestão de Equipes</h2>
-          <p className="text-xs text-on-surface-variant">Monitore em tempo real as equipes contratadas no local ou em deslocamento.</p>
-        </div>
-        <button 
-          onClick={() => setModalOpen(true)}
-          className="bg-primary hover:bg-primary-container text-on-primary text-xs font-semibold py-2.5 px-4 rounded-full transition-all flex items-center gap-1.5 shadow-md active:scale-95 duration-100 shrink-0"
+    <main className="pb-24 max-w-3xl mx-auto">
+      {/* Header fixo */}
+      <div className="sticky top-0 bg-white border-b border-outline-variant/30 z-10 px-4 py-3 flex items-center gap-3">
+        <button
+          onClick={() => { setSelectedEvent(null); setBookings([]); setExpandedBooking(null); }}
+          className="p-2 rounded-full hover:bg-surface-container transition-colors"
         >
-          <PlusCircle className="w-4 h-4" />
-          <span>Adicionar novo grupo</span>
+          <ArrowLeft className="w-5 h-5 text-on-surface" />
         </button>
-      </section>
+        <div className="flex-1 min-w-0">
+          <p className="font-display font-bold text-primary truncate">{selectedEvent.name}</p>
+          <p className="text-xs text-on-surface-variant">{selectedEvent.location_name}</p>
+        </div>
+        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border shrink-0 ${evStatus.color}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${evStatus.dot}`} />
+          {evStatus.label}
+        </span>
+      </div>
 
-      {/* Groups Bento Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {bookings.map((team, idx) => (
-          <motion.div 
-            layout
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            key={team.id}
-            className="bg-white border border-outline-variant/30 rounded-2xl overflow-hidden hover:shadow-md transition-shadow flex flex-col justify-between"
-          >
-            {/* Card Header Info */}
-            <div className="p-4 border-b border-outline-variant/30 flex justify-between items-start gap-2">
-              <div className="text-left">
-                <h3 className="font-display font-bold text-lg text-primary">{team.name}</h3>
-                <p className="text-xs text-on-surface-variant">
-                  {team.countConfirmed} confirmados {team.countReserve > 0 ? `• ${team.countReserve} em reserva` : ''}
+      <div className="px-4 pt-4 space-y-4">
+        {/* Resumo do evento */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white border border-outline-variant/30 rounded-2xl p-4 shadow-sm">
+            <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wide flex items-center gap-1 mb-1">
+              <Calendar className="w-3.5 h-3.5" /> Data
+            </p>
+            <p className="text-sm font-semibold text-on-surface">
+              {new Date(selectedEvent.starts_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric' })}
+            </p>
+          </div>
+          <div className="bg-white border border-outline-variant/30 rounded-2xl p-4 shadow-sm">
+            <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wide flex items-center gap-1 mb-1">
+              <Clock className="w-3.5 h-3.5" /> Horário
+            </p>
+            <p className="text-sm font-semibold text-on-surface">
+              {new Date(selectedEvent.starts_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}
+              {' – '}
+              {new Date(selectedEvent.ends_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}
+            </p>
+          </div>
+          <div className="col-span-2 bg-primary/5 border border-primary/20 rounded-2xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Users className="w-5 h-5 text-primary" />
+              <div>
+                <p className="text-xs font-bold text-primary uppercase tracking-wide">Equipe</p>
+                <p className="text-sm text-on-surface-variant">
+                  {totalConfirmed} confirmados de {totalRequested} solicitados
                 </p>
               </div>
-              {getStatusBadge(team.status)}
             </div>
+            <button onClick={fetchBookings} className="p-2 rounded-full hover:bg-primary/10 transition-colors">
+              <RefreshCw className={`w-4 h-4 text-primary ${loadingBookings ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
 
-            {/* Card Interactive details based on status */}
-            <div className="p-4 space-y-4 flex-grow flex flex-col justify-between">
-              
-              {/* Specialized rendering: If DJ/Waiter has map or profile details */}
-              {team.name.includes("Garçom") && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div className="flex -space-x-3 select-none">
-                      <img 
-                        onClick={() => onSelectPro('ricardo-1')}
-                        alt="Staff Ricardo Avatar" 
-                        title="Ver Perfil de Ricardo"
-                        className="w-10 h-10 rounded-full border-2 border-white object-cover shadow-sm cursor-pointer hover:scale-105 transition-transform" 
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBatOOGcNmH7uOEaKdULjeu1_1XcIXwkwKNRJFS_5cSHvaPIz02NsuKJHMTVnmiJPSOkWPKvWfeIFBASMM06HbUYroMrimTDDW78L04vy6QSEWuY0ODo0azuka159ioZNsfUHCnRYFJcNS5mPmZ7GM1e3Lhi_xbaSmtuKh4VKbul0HWheixVsqmaUmqYwGpMG8WYd2t8RPFywQCIXhMv7XMwv7_edaHXJNzK5fLArF-Py0Xb_SzC5HnwD72ZvaAopGKnNP4m90ZQ"
-                      />
-                      <div className="w-10 h-10 rounded-full border-2 border-white bg-primary-container text-on-primary-container flex items-center justify-center text-xs font-bold shadow-sm">
-                        +4
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center gap-1 justify-end text-amber-500">
-                        <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
-                        <span className="font-mono text-xs font-bold">{team.rating}</span>
-                      </div>
-                      <p className="text-[11px] text-on-surface-variant font-medium">Média da equipe</p>
-                    </div>
-                  </div>
+        {/* Bookings */}
+        <div className="space-y-3">
+          <h2 className="font-display font-bold text-lg text-primary">Equipe Contratada</h2>
 
-                  {/* MINI MAP PREVIEW */}
-                  <div 
-                    onClick={() => setSelectedMapPreview("garcons")}
-                    className="relative h-28 rounded-xl overflow-hidden group cursor-pointer border border-outline-variant/30 shadow-inner"
+          {loadingBookings ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-6 h-6 text-primary animate-spin" />
+            </div>
+          ) : bookings.length === 0 ? (
+            <div className="bg-white border border-outline-variant/30 rounded-2xl p-8 text-center">
+              <AlertCircle className="w-8 h-8 text-on-surface-variant mx-auto mb-2" />
+              <p className="text-sm font-semibold text-on-surface">Nenhum booking ainda</p>
+            </div>
+          ) : (
+            bookings.map((booking) => {
+              const catInfo  = CATEGORY_MAP[booking.category] ?? { label: booking.category, icon: Users, color: 'bg-slate-50 text-slate-700 border-slate-200' };
+              const stInfo   = BOOKING_STATUS[booking.status] ?? BOOKING_STATUS.PENDING;
+              const CatIcon  = catInfo.icon;
+              const confirmed = booking.booking_professionals?.filter(p =>
+                ['ACCEPTED','IN_TRANSIT','CHECKED_IN','CHECKED_OUT'].includes(p.status)
+              ) ?? [];
+              const inTransit = booking.booking_professionals?.filter(p => p.status === 'IN_TRANSIT') ?? [];
+              const isExpanded = expandedBooking === booking.id;
+
+              return (
+                <motion.div key={booking.id} layout
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  className="bg-white border border-outline-variant/30 rounded-2xl overflow-hidden shadow-sm"
+                >
+                  <button
+                    onClick={() => setExpandedBooking(isExpanded ? null : booking.id)}
+                    className="w-full flex items-center gap-4 p-4 text-left hover:bg-surface-container/50 transition-colors"
                   >
-                    <div 
-                      className="absolute inset-0 bg-cover bg-center group-hover:scale-105 transition-transform duration-500" 
-                      style={{ backgroundImage: `url(${MAP_MINI_PREVIEW})` }} 
-                    />
-                    <div className="absolute inset-0 bg-primary/10 group-hover:bg-transparent transition-colors duration-200" />
-                    <div className="absolute top-2 left-2 glass-panel px-2.5 py-1 rounded text-[10px] font-mono font-bold flex items-center gap-1">
-                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                      AO VIVO
+                    <div className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${catInfo.color}`}>
+                      <CatIcon className="w-5 h-5" />
                     </div>
-                    <div className="absolute bottom-2 right-2 glass-panel px-2 py-0.5 rounded text-[10px] font-bold text-on-surface">
-                      ETA: No Local
+                    <div className="flex-1 min-w-0">
+                      <p className="font-display font-bold text-primary">{catInfo.label}</p>
+                      <p className="text-xs text-on-surface-variant mt-0.5">
+                        {confirmed.length}/{booking.quantity} confirmados
+                        {inTransit.length > 0 && ` · ${inTransit.length} em trânsito`}
+                      </p>
                     </div>
-                  </div>
-                </>
-              )}
-
-              {team.name.includes("Segurança") && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-left">
-                      <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-on-surface-variant">
-                        <Shield className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-on-surface">Unidade Alpha</p>
-                        <p className="text-[11px] text-on-surface-variant">Rádio criptografado</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-display font-semibold text-lg text-primary">{team.distance || '1.2 km'}</p>
-                      <p className="text-[10px] text-on-surface-variant font-bold uppercase">Distância atual</p>
-                    </div>
-                  </div>
-
-                  {/* MINI MAP PREVIEW */}
-                  <div 
-                    onClick={() => setSelectedMapPreview("seguranca")}
-                    className="relative h-28 rounded-xl overflow-hidden group cursor-pointer border border-outline-variant/30 shadow-inner"
-                  >
-                    <div 
-                      className="absolute inset-0 bg-cover bg-center group-hover:scale-105 transition-transform duration-500" 
-                      style={{ backgroundImage: `url(${MAP_MINI_PREVIEW})` }} 
-                    />
-                    <div className="absolute inset-0 bg-secondary/10 group-hover:bg-transparent transition-colors duration-200" />
-                    <div className="absolute bottom-2 right-2 glass-panel px-2.5 py-1 rounded text-[10px] font-mono font-bold text-primary">
-                      ETA: {team.eta || '8 min'}
-                    </div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                      <MapPin className="text-primary-container w-8 h-8 drop-shadow-md animate-bounce" />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {team.name.includes("Limpeza") && (
-                <div className="space-y-3 text-left">
-                  <p className="text-xs text-on-surface-variant">Lista de apoio mobilizada de reserva para o Palácio das Artes.</p>
-                  <div className="flex flex-wrap gap-1.5 items-center">
-                    <div 
-                      onClick={() => onSelectPro('ricardo-1')}
-                      className="flex items-center gap-1 bg-surface-container hover:bg-surface-container-high cursor-pointer p-1 pr-3 rounded-full text-[11px] font-semibold transition-all shadow-sm border border-outline-variant/20"
-                    >
-                      <img className="w-5 h-5 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBatOOGcNmH7uOEaKdULjeu1_1XcIXwkwKNRJFS_5cSHvaPIz02NsuKJHMTVnmiJPSOkWPKvWfeIFBASMM06HbUYroMrimTDDW78L04vy6QSEWuY0ODo0azuka159ioZNsfUHCnRYFJcNS5mPmZ7GM1e3Lhi_xbaSmtuKh4VKbul0HWheixVsqmaUmqYwGpMG8WYd2t8RPFywQCIXhMv7XMwv7_edaHXJNzK5fLArF-Py0Xb_SzC5HnwD72ZvaAopGKnNP4m90ZQ" alt="Ricardo Avatar" />
-                      <span>Ricardo M.</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-surface-container p-1 px-3 rounded-full text-[11px] font-semibold text-on-surface-variant border border-outline-variant/20 shadow-sm">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      <span>Ana Lúcia</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-surface-container p-1 px-3 rounded-full text-[11px] font-semibold text-on-surface-variant border border-outline-variant/20 shadow-sm">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      <span>Carlos H.</span>
-                    </div>
-                    <button 
-                      onClick={() => onNavigate('favorites')}
-                      className="bg-primary-fixed-dim text-on-primary-fixed-variant text-[11px] font-bold px-3 py-1.5 rounded-full hover:brightness-95 transition-all shadow-sm"
-                    >
-                      Ver todos
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {team.name.includes("Som") && (
-                <div className="space-y-4 text-left">
-                  <div className="bg-surface-container-high rounded-xl p-3.5 space-y-2 border border-outline-variant/35 shadow-sm">
-                    <div className="flex items-center justify-between text-xs font-semibold">
-                      <span className="text-on-surface-variant">Setup de Cabeamento e Caixas</span>
-                      <span className="font-mono text-secondary font-bold">{team.setupPercentage || 85}% Concluído</span>
-                    </div>
-                    <div className="w-full h-2.5 bg-surface-variant rounded-full overflow-hidden shadow-inner">
-                      <div 
-                        className="h-full bg-secondary rounded-full transition-all duration-1000" 
-                        style={{ width: `${team.setupPercentage || 85}%` }} 
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Created custom categories generic view fallback */}
-              {!['Garçom', 'Segurança', 'Limpeza', 'Som'].some(n => team.name.includes(n)) && (
-                <div className="space-y-2 text-left">
-                  <div className="p-3 bg-surface-container-low rounded-xl border border-outline-variant/20">
-                    <p className="text-xs text-on-surface-variant">Equipe eventual despachada e em trânsito com prioridade máxima.</p>
-                    <div className="flex justify-between text-[11px] font-semibold text-slate-500 mt-2">
-                      <span>Confirmação rápida</span>
-                      <span className="text-emerald-600 flex items-center gap-0.5">
-                        <CheckCircle className="w-3.5 h-3.5" /> 100% OK
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full border flex items-center gap-1 ${stInfo.color}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${stInfo.dot}`} />
+                        {stInfo.label}
                       </span>
+                      <ChevronRight className={`w-4 h-4 text-on-surface-variant transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                     </div>
-                  </div>
-                </div>
-              )}
-
-            </div>
-          </motion.div>
-        ))}
-      </section>
-
-      {/* New Group Modal form */}
-      <AnimatePresence>
-        {modalOpen && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.92, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 shadow-2xl border border-outline-variant max-w-md w-full relative"
-            >
-              <button 
-                onClick={() => setModalOpen(false)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <h3 className="font-display font-extrabold text-xl text-primary text-left mb-1.5">Criar Nova Equipe</h3>
-              <p className="text-xs text-on-surface-variant text-left mb-4">Adicione um novo segmento de staff para as operações no Palácio das Artes.</p>
-
-              <form onSubmit={handleAddNewTeam} className="space-y-4 text-left">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">NOME DA EQUIPE</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: Auxiliares de Credenciamento, Recepcionistas..." 
-                    value={newTeamName}
-                    onChange={(e) => setNewTeamName(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-outline-variant focus:ring-1 focus:ring-primary focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">QTD CONFIRMADOS</label>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      value={newTeamConfirmed}
-                      onChange={(e) => setNewTeamConfirmed(Number(e.target.value))}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-outline-variant focus:ring-1 focus:ring-primary focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">QTD RESERVA</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      value={newTeamReserve}
-                      onChange={(e) => setNewTeamReserve(Number(e.target.value))}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-outline-variant focus:ring-1 focus:ring-primary focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">STATUS INICIAL</label>
-                  <select 
-                    value={newTeamStatus}
-                    onChange={(e) => setNewTeamStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-outline-variant focus:ring-1 focus:ring-primary focus:outline-none bg-white"
-                  >
-                    <option value="EM SERVIÇO">EM SERVIÇO</option>
-                    <option value="EM TRÂNSITO">EM TRÂNSITO</option>
-                    <option value="STANDBY">STANDBY</option>
-                  </select>
-                </div>
-
-                <div className="pt-2 flex gap-2">
-                  <button 
-                    type="button" 
-                    onClick={() => setModalOpen(false)}
-                    className="flex-1 py-3 border border-outline-variant text-[#1a1b1e] font-semibold text-xs rounded-xl hover:bg-slate-50"
-                  >
-                    Cancelar
                   </button>
-                  <button 
-                    type="submit"
-                    className="flex-1 py-3 bg-primary text-on-primary font-bold text-xs rounded-xl shadow-md hover:brightness-110 active:scale-95"
-                  >
-                    Adicionar Equipe
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
-      {/* Map Expander Overlay */}
-      <AnimatePresence>
-        {selectedMapPreview && (
-          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl overflow-hidden max-w-2xl w-full p-4 relative"
-            >
-              <button 
-                onClick={() => setSelectedMapPreview(null)}
-                className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-1.5 rounded-full hover:bg-white text-slate-600 shadow-md z-10"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              
-              <h3 className="font-display font-extrabold text-lg text-primary text-left mb-2">Visualização Tática SP</h3>
-              <div className="relative aspect-video rounded-xl overflow-hidden border border-outline-variant">
-                <img src={MAP_MINI_PREVIEW} alt="Full map preview" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-primary/10 mix-blend-multiply" />
-                <div className="absolute top-4 left-4 bg-white/95 px-3 py-1.5 rounded-lg border text-xs font-bold shadow-md">
-                  🛰️ Satélite Ao Vivo: Área Metropolitana
-                </div>
-                {selectedMapPreview === 'seguranca' && (
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                    <MapPin className="text-rose-500 w-10 h-10 drop-shadow-lg animate-bounce" />
-                    <div className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-widest px-2.5 py-1 rounded shadow-md mt-1">
-                      Em deslocamento (ETA 8 min)
-                    </div>
-                  </div>
-                )}
-                {selectedMapPreview === 'garcons' && (
-                  <div className="absolute top-1/3 left-1/3 flex flex-col items-center">
-                    <MapPin className="text-emerald-500 w-10 h-10 drop-shadow-lg animate-bounce" />
-                    <div className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-widest px-2.5 py-1 rounded shadow-md mt-1">
-                      No Local (Gala de Inverno)
-                    </div>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden border-t border-outline-variant/20"
+                      >
+                        <div className="p-4 space-y-2">
+                          {booking.booking_professionals?.length === 0 ? (
+                            <div className="text-center py-4">
+                              <p className="text-xs text-on-surface-variant">Aguardando profissionais aceitarem o convite...</p>
+                              <div className="flex justify-center gap-1 mt-2">
+                                {[...Array(booking.quantity)].map((_, i) => (
+                                  <div key={i} className="w-8 h-8 rounded-full bg-surface-container border-2 border-dashed border-outline-variant flex items-center justify-center">
+                                    <Users className="w-3.5 h-3.5 text-on-surface-variant" />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            booking.booking_professionals.map(pro => {
+                              const proStatus = PRO_STATUS[pro.status] ?? { label: pro.status, color: 'text-on-surface-variant' };
+                              const proName = pro.professionals?.users?.full_name ?? 'Profissional';
 
+                              return (
+                                <div key={pro.id} className="flex items-center gap-3 py-1.5">
+                                  {pro.professionals?.users?.avatar_url ? (
+                                    <img src={pro.professionals.users.avatar_url} alt={proName}
+                                      className="w-9 h-9 rounded-full object-cover border border-outline-variant/30" />
+                                  ) : (
+                                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                                      <span className="text-sm font-bold text-primary">{proName[0]}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-on-surface truncate">{proName}</p>
+                                    <p className={`text-xs font-medium ${proStatus.color} flex items-center gap-1`}>
+                                      {pro.status === 'IN_TRANSIT'  && <Navigation className="w-3 h-3" />}
+                                      {pro.status === 'CHECKED_IN'  && <CheckCircle className="w-3 h-3" />}
+                                      {proStatus.label}
+                                      {pro.early_minutes != null && pro.early_minutes > 0 && (
+                                        <span className="text-primary font-bold">· {pro.early_minutes} min antes</span>
+                                      )}
+                                    </p>
+                                  </div>
+                                  {pro.amount > 0 && (
+                                    <span className="font-mono text-xs font-bold text-on-surface-variant shrink-0">
+                                      R$ {Number(pro.amount).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })
+                          )}
+
+                          {booking.multiplier_type === 'EMERGENCY' && (
+                            <div className="mt-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700 font-medium flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4 shrink-0" />
+                              Booking de emergência — multiplicador 1.5x aplicado
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })
+          )}
+        </div>
+      </div>
     </main>
   );
 }
