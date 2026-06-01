@@ -84,6 +84,29 @@ supabase/
 - ⏳ Pagamento via Pix
 - ⏳ Notificações WhatsApp
 
+## Interface do Profissional — Regras definidas (ainda não implementadas)
+Ver `/docs/profissional_interface_rules.md` para especificação completa. Resumo:
+
+- **Presença online**: `online_score` acumula pontos por tempo online → critério de desempate no ranking
+- **Raio de atuação**: profissional cadastra endereço residencial + raio de preferência (km)
+- **Convites**: mapa centrado na residência com pinos de eventos disponíveis
+- **Favoritos**: aceitar convite de cliente que favoritou o profissional eleva estrelas
+- **Tempo de resposta**: X minutos para aceitar (sugestão: 10 min), depois repassa ao próximo
+- **Alerta 6h antes**: push + WhatsApp com briefing completo (uniforme, alimentação, transporte)
+- **Modo silencioso**: zero notificações durante o evento (starts_at → ends_at + 30min)
+- **Pós-evento**: confirmação de pagamento + link de avaliação
+- **Agenda**: lista cronológica de eventos aceitos com botões de ação por status
+
+## Campos a adicionar em `professionals` (para interface do profissional)
+```sql
+home_address     text
+home_location    geography(Point, 4326)
+action_radius_km int default 10
+online_score     int default 0
+last_seen_at     timestamptz
+is_available     boolean default false
+```
+
 ## Checklist pré-produção
 Ver `/memory/project_test_flags.md` — itens a reativar antes do release:
 - Confirmação de e-mail do Supabase (atualmente ligada ✅)
