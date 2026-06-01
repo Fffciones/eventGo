@@ -84,6 +84,14 @@ supabase/
 - ⏳ Pagamento via Pix
 - ⏳ Notificações WhatsApp
 
+## Notificações do Cliente — Regras definidas
+Ver `/docs/cliente_notifications_rules.md` para especificação completa. Resumo:
+
+- **Push (app)**: todas as notificações rotineiras (confirmações, alertas, pós-evento)
+- **WhatsApp**: APENAS emergências — no-show, substituto acionado, cancelamento crítico
+- **Silêncio durante o evento**: zero push de `starts_at` até `ends_at + 30min`
+- **Pós-evento**: push de conclusão + pagamento + até 2 lembretes de avaliação
+
 ## Interface do Profissional — Regras definidas (ainda não implementadas)
 Ver `/docs/profissional_interface_rules.md` para especificação completa. Resumo:
 
