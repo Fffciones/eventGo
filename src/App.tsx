@@ -91,6 +91,7 @@ export default function App() {
     return <AuthScreen onAuthenticated={() => {}} />;
   }
 
+
   const activeEvent = events.find(e => e.status === 'ATIVO') || events[0];
 
   const handleAddBooking = (newBooking: BookingTeam) => {

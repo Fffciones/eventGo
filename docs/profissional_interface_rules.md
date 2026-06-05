@@ -73,6 +73,17 @@ A plataforma envia convites nesta ordem:
 - Cachê oferecido
 - Horário do evento
 
+### 4.3 Regra de visibilidade — vagas abertas no mapa
+- O profissional **só enxerga eventos da sua própria categoria** no mapa (segurança vê só eventos de segurança, DJ vê só eventos de DJ, etc.)
+- Um pino aparece no mapa enquanto o evento ainda tem **vagas abertas** — ou seja, o cliente solicitou N profissionais e ainda não recebeu todas as confirmações
+- Exemplo: cliente pediu 10 seguranças, 6 confirmaram → o evento ainda aparece no mapa para os demais seguranças disponíveis com "4 vagas restantes"
+- Quando a última vaga é preenchida o pino **desaparece automaticamente** do mapa de todos
+- Filtros aplicados para um profissional ver um pino:
+  1. Categoria do booking bate com a categoria do profissional
+  2. Profissional está com `is_available = true`
+  3. Evento está dentro do `action_radius_km` do profissional
+  4. Ainda há `booking_professionals` com vagas não preenchidas (INVITED ou sem resposta)
+
 ---
 
 ## 5. Agenda de Eventos do Profissional

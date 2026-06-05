@@ -1,28 +1,17 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ArrowLeft, User, Utensils, Headphones, Shield, Sparkles,
-  Camera, Mic, Settings, UserCheck, Eye, EyeOff, Loader2,
-  CheckCircle, Star, MapPin, Phone, Mail, FileText,
-  CreditCard, MessageCircle, Gift
+  ArrowLeft, User, Eye, EyeOff, Loader2,
+  Star, Phone, Mail, FileText,
+  CreditCard, MessageCircle, Gift, Briefcase, Receipt
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useFunctions } from '../../hooks/useFunctions';
 
 interface ProfessionalSignupScreenProps {
   onBack: () => void;
   onSuccess: () => void;
 }
-
-const CATEGORIES = [
-  { code: 'GARCOM',             label: 'Garçom / Barman',      icon: Utensils,   desc: 'Serviço de mesa, buffet, coquetel' },
-  { code: 'DJ',                 label: 'DJ',                   icon: Headphones, desc: 'Sonorização e animação musical' },
-  { code: 'SEGURANCA',          label: 'Segurança',            icon: Shield,     desc: 'Vigilância e controle de acesso' },
-  { code: 'FAXINEIRO',          label: 'Limpeza',              icon: Sparkles,   desc: 'Limpeza e manutenção do espaço' },
-  { code: 'FOTOGRAFO',          label: 'Fotógrafo',            icon: Camera,     desc: 'Fotografia e videografia de eventos' },
-  { code: 'MESTRE_CERIMONIAS',  label: 'Mestre de Cerimônias', icon: Mic,        desc: 'Apresentação e condução do evento' },
-  { code: 'PRODUTOR',           label: 'Produtor de Eventos',  icon: Settings,   desc: 'Gestão e produção completa' },
-  { code: 'CONTROLADOR_ACESSO', label: 'Controle de Acesso',   icon: UserCheck,  desc: 'Credenciamento e portaria' },
-];
 
 const PIX_TYPES = [
   { code: 'CPF',    label: 'CPF' },
@@ -33,6 +22,7 @@ const PIX_TYPES = [
 ];
 
 export default function ProfessionalSignupScreen({ onBack, onSuccess }: ProfessionalSignupScreenProps) {
+  const { functions: allFunctions, loading: functionsLoading } = useFunctions();
   const [step, setStep]         = useState<1 | 2 | 3 | 4>(1);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
@@ -48,18 +38,27 @@ export default function ProfessionalSignupScreen({ onBack, onSuccess }: Professi
   const [whatsapp, setWhatsapp]   = useState(true);
 
   // Step 2 — perfil profissional
-  const [category, setCategory]   = useState('');
+  const [professionalType, setProfessionalType] = useState<'MEI' | 'DIARISTA' | ''>('');
+  const [selectedFunctionIds, setSelectedFunctionIds] = useState<string[]>([]);
   const [mei, setMei]             = useState('');
+  const [cpf, setCpf]             = useState('');
   const [bio, setBio]             = useState('');
 
   // Step 3 — pagamento
-  const [pixType, setPixType]     = useState('CNPJ');
+  const [pixType, setPixType]     = useState('CPF');
   const [pixKey, setPixKey]       = useState('');
+
+  const toggleFunction = (id: string) => {
+    setSelectedFunctionIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   // validações
   const step1Valid = name.trim() && email.trim() && phone.trim()
     && password.length >= 8 && password === confirm;
-  const step2Valid = category && mei.trim();
+  const step2Valid = !!professionalType && selectedFunctionIds.length > 0 &&
+    (professionalType === 'MEI' ? mei.trim() : cpf.trim());
   const step3Valid = pixKey.trim();
 
   const handleSubmit = async () => {
@@ -73,9 +72,10 @@ export default function ProfessionalSignupScreen({ onBack, onSuccess }: Professi
         password,
         options: {
           data: {
-            full_name:    name,
-            user_type:    'PROFESSIONAL',
-            mei_number:   mei,
+            full_name:       name,
+            user_type:       'PROFESSIONAL',
+            professional_type: professionalType,
+            mei_number:      professionalType === 'MEI' ? mei : null,
             category,
             phone,
             whatsapp_opt_in: whatsapp,
@@ -87,24 +87,36 @@ export default function ProfessionalSignupScreen({ onBack, onSuccess }: Professi
 
       // 2. Se sessão imediata (confirmação desligada), criar perfis
       if (data.session) {
-        // public.users já criado pelo trigger
-        // Atualizar phone e whatsapp_opt_in
         await supabase.from('users').update({
           phone,
           whatsapp_opt_in: whatsapp,
         }).eq('id', data.session.user.id);
 
-        // Criar professionals
-        await supabase.from('professionals').insert({
-          user_id:      data.session.user.id,
-          mei_number:   mei,
-          category,
-          status:       'PENDING',
-          stars:        0,
-          events_count: 0,
-          hourly_cache: 0,
-          bio:          bio || null,
-        });
+        // Categoria legada = slug da primeira função selecionada
+        const firstFunction = allFunctions.find(f => f.id === selectedFunctionIds[0]);
+        const legacyCategory = firstFunction?.slug.toUpperCase() ?? 'GARCOM';
+
+        const { data: proData } = await supabase.from('professionals').insert({
+          user_id:           data.session.user.id,
+          professional_type: professionalType,
+          mei_number:        professionalType === 'MEI' ? mei : null,
+          category:          legacyCategory,
+          status:            'PENDING',
+          stars:             0,
+          events_count:      0,
+          hourly_cache:      0,
+          bio:               bio || null,
+        }).select('id').single();
+
+        // Salvar funções selecionadas
+        if (proData?.id && selectedFunctionIds.length > 0) {
+          await supabase.from('professional_functions').insert(
+            selectedFunctionIds.map(function_id => ({
+              professional_id: proData.id,
+              function_id,
+            }))
+          );
+        }
       }
 
       onSuccess();
@@ -232,45 +244,108 @@ export default function ProfessionalSignupScreen({ onBack, onSuccess }: Professi
 
               <div>
                 <h2 className="font-display text-2xl font-bold text-primary">Perfil profissional</h2>
-                <p className="text-sm text-on-surface-variant mt-1">Selecione sua categoria e informe o MEI.</p>
+                <p className="text-sm text-on-surface-variant mt-1">Informe como você presta serviços e sua função.</p>
               </div>
 
+              {/* Tipo de profissional */}
               <div>
                 <label className="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wide">
-                  Categoria principal
+                  Como você presta serviços?
                 </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  {CATEGORIES.map(({ code, label, icon: Icon, desc }) => (
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    {
+                      type: 'MEI' as const,
+                      icon: Briefcase,
+                      title: 'Tenho MEI',
+                      desc: 'Emito nota fiscal. Recebo via CNPJ.',
+                    },
+                    {
+                      type: 'DIARISTA' as const,
+                      icon: Receipt,
+                      title: 'Sou Diarista',
+                      desc: 'Recebo via recibo. Uso CPF.',
+                    },
+                  ] as const).map(({ type, icon: Icon, title, desc }) => (
                     <button
-                      key={code}
+                      key={type}
                       type="button"
-                      onClick={() => setCategory(code)}
-                      className={`text-left p-3.5 rounded-2xl border-2 transition-all ${
-                        category === code
+                      onClick={() => {
+                        setProfessionalType(type);
+                        setPixType(type === 'MEI' ? 'CNPJ' : 'CPF');
+                      }}
+                      className={`text-left p-4 rounded-2xl border-2 transition-all ${
+                        professionalType === type
                           ? 'border-primary bg-primary/5'
                           : 'border-outline-variant bg-white hover:border-primary/40'
                       }`}
                     >
-                      <Icon className={`w-5 h-5 mb-2 ${category === code ? 'text-primary' : 'text-on-surface-variant'}`} />
-                      <p className={`text-xs font-bold leading-tight ${category === code ? 'text-primary' : 'text-on-surface'}`}>
-                        {label}
+                      <Icon className={`w-5 h-5 mb-2 ${professionalType === type ? 'text-primary' : 'text-on-surface-variant'}`} />
+                      <p className={`text-sm font-bold leading-tight ${professionalType === type ? 'text-primary' : 'text-on-surface'}`}>
+                        {title}
                       </p>
-                      <p className="text-[10px] text-on-surface-variant mt-0.5 leading-tight">{desc}</p>
+                      <p className="text-[11px] text-on-surface-variant mt-1 leading-tight">{desc}</p>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <Field label="Número do MEI (CNPJ)">
-                <div className="relative">
-                  <FileText className="absolute left-3 top-3 w-4 h-4 text-on-surface-variant" />
-                  <input type="text" required value={mei} onChange={e => setMei(e.target.value)}
-                    placeholder="00.000.000/0001-00" className={`${IC} pl-9`} />
-                </div>
-                <p className="text-[11px] text-on-surface-variant mt-1">
-                  MEI ativo é obrigatório para emissão de nota fiscal e recebimento de pagamentos.
-                </p>
-              </Field>
+              {/* Funções — múltipla seleção */}
+              <div>
+                <label className="block text-xs font-bold text-on-surface-variant mb-1 uppercase tracking-wide">
+                  Funções que você exerce
+                </label>
+                <p className="text-[11px] text-on-surface-variant mb-2">Selecione uma ou mais funções.</p>
+                {functionsLoading ? (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {allFunctions.map(f => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => toggleFunction(f.id)}
+                        className={`px-3 py-2 rounded-full border-2 text-sm font-semibold transition-all ${
+                          selectedFunctionIds.includes(f.id)
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-outline-variant text-on-surface-variant hover:border-primary/40'
+                        }`}
+                      >
+                        {f.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Documento — condicional por tipo */}
+              {professionalType === 'MEI' && (
+                <Field label="CNPJ do MEI">
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-3 w-4 h-4 text-on-surface-variant" />
+                    <input type="text" value={mei} onChange={e => setMei(e.target.value)}
+                      placeholder="00.000.000/0001-00" className={`${IC} pl-9`} />
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant mt-1">
+                    Usado para emissão de nota fiscal e pagamento.
+                  </p>
+                </Field>
+              )}
+
+              {professionalType === 'DIARISTA' && (
+                <Field label="CPF">
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-3 w-4 h-4 text-on-surface-variant" />
+                    <input type="text" value={cpf} onChange={e => setCpf(e.target.value)}
+                      placeholder="000.000.000-00" className={`${IC} pl-9`} />
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant mt-1">
+                    Usado para emissão de recibo de pagamento autônomo.
+                  </p>
+                </Field>
+              )}
 
               <Field label="Bio / Apresentação (opcional)">
                 <textarea
@@ -346,36 +421,29 @@ export default function ProfessionalSignupScreen({ onBack, onSuccess }: Professi
                 />
               </Field>
 
-              <div className="bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-3">
-                <p className="text-xs font-bold text-on-surface mb-2">Resumo de ganhos estimados (8h)</p>
-                <div className="space-y-1">
-                  {category ? (() => {
-                    const prices: Record<string, number[]> = {
-                      GARCOM: [280, 378, 490], DJ: [800, 1080, 1400],
-                      SEGURANCA: [320, 432, 560], FAXINEIRO: [200, 270, 350],
-                      FOTOGRAFO: [1200, 1620, 2100], MESTRE_CERIMONIAS: [600, 810, 1050],
-                      PRODUTOR: [1500, 2025, 2625], CONTROLADOR_ACESSO: [240, 324, 420],
-                    };
-                    const p = prices[category] || [0,0,0];
-                    return (
-                      <>
-                        {[['Nível base (0 estrelas)', p[0]], ['3 estrelas', p[1]], ['5 estrelas', p[2]]].map(([label, val]) => (
-                          <div key={label as string} className="flex justify-between text-xs">
+              {selectedFunctionIds.length > 0 && (
+                <div className="bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-3">
+                  <p className="text-xs font-bold text-on-surface mb-2">Remuneração estimada por função (8h)</p>
+                  <div className="space-y-2">
+                    {allFunctions
+                      .filter(f => selectedFunctionIds.includes(f.id))
+                      .map(f => {
+                        const pay = professionalType === 'MEI' ? f.base_pay_mei : f.base_pay_diarista;
+                        return (
+                          <div key={f.id} className="flex justify-between text-xs">
                             <span className="text-on-surface-variant flex items-center gap-1">
-                              <Star className="w-3 h-3 text-amber-400" /> {label}
+                              <Star className="w-3 h-3 text-amber-400" /> {f.name}
                             </span>
                             <span className="font-mono font-bold text-primary">
-                              R$ {Number(val).toLocaleString('pt-BR')} <span className="font-normal text-on-surface-variant">(líquido: R$ {(Number(val) * 0.85).toLocaleString('pt-BR', {maximumFractionDigits:0})})</span>
+                              R$ {pay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
-                        ))}
-                      </>
-                    );
-                  })() : (
-                    <p className="text-xs text-on-surface-variant">Selecione uma categoria no passo anterior para ver os ganhos estimados.</p>
-                  )}
+                        );
+                      })
+                    }
+                  </div>
                 </div>
-              </div>
+              )}
             </motion.div>
           )}
 
@@ -395,8 +463,12 @@ export default function ProfessionalSignupScreen({ onBack, onSuccess }: Professi
                 <Row label="E-mail" value={email} />
                 <Row label="Telefone" value={phone} />
                 <Row label="WhatsApp" value={whatsapp ? 'Ativado' : 'Desativado'} />
-                <Row label="Categoria" value={CATEGORIES.find(c => c.code === category)?.label ?? '—'} />
-                <Row label="MEI" value={mei} />
+                <Row label="Tipo" value={professionalType === 'MEI' ? 'MEI (Nota Fiscal)' : 'Diarista (Recibo)'} />
+                <Row label="Funções" value={allFunctions.filter(f => selectedFunctionIds.includes(f.id)).map(f => f.name).join(', ') || '—'} />
+                {professionalType === 'MEI'
+                  ? <Row label="CNPJ MEI" value={mei} />
+                  : <Row label="CPF" value={cpf} />
+                }
                 <Row label="Chave Pix" value={`${PIX_TYPES.find(p => p.code === pixType)?.label}: ${pixKey}`} />
                 {bio && <Row label="Bio" value={bio} />}
               </div>

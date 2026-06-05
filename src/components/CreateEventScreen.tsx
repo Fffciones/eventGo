@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, MapPin, Calendar, Clock, Users, Plus, Minus,
-  Utensils, Headphones, Shield, Sparkles, Camera, Mic,
-  Settings, UserCheck, Loader2, CheckCircle, Search, X
+  Loader2, CheckCircle, Search, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useGeocoding } from '../hooks/useGeocoding';
+import { useFunctions } from '../hooks/useFunctions';
 import type { UserProfile } from '../hooks/useProfile';
 import type { GeoResult } from '../hooks/useGeocoding';
 
-interface CategoryRequest {
-  category: string;
+interface FunctionRequest {
+  function_id: string;
+  category: string;   // legado: slug em uppercase para bookings.category
   label: string;
   quantity: number;
 }
@@ -22,18 +23,8 @@ interface CreateEventScreenProps {
   onCreated: () => void;
 }
 
-const CATEGORIES = [
-  { code: 'GARCOM',             label: 'Garçom',               icon: Utensils },
-  { code: 'DJ',                 label: 'DJ',                   icon: Headphones },
-  { code: 'SEGURANCA',          label: 'Segurança',            icon: Shield },
-  { code: 'FAXINEIRO',          label: 'Limpeza',              icon: Sparkles },
-  { code: 'FOTOGRAFO',          label: 'Fotógrafo',            icon: Camera },
-  { code: 'MESTRE_CERIMONIAS',  label: 'Mestre de Cerimônias', icon: Mic },
-  { code: 'PRODUTOR',           label: 'Produtor',             icon: Settings },
-  { code: 'CONTROLADOR_ACESSO', label: 'Controle de Acesso',   icon: UserCheck },
-];
-
 export default function CreateEventScreen({ profile, onBack, onCreated }: CreateEventScreenProps) {
+  const { functions, loading: functionsLoading } = useFunctions();
   const [step, setStep]           = useState<1 | 2 | 3 | 4>(1);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState<string | null>(null);
@@ -49,8 +40,8 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
 
   const { geocode, loading: geoLoading, error: geoError } = useGeocoding();
 
-  // Step 2 — categorias
-  const [categories, setCategories] = useState<CategoryRequest[]>([]);
+  // Step 2 — funções solicitadas
+  const [categories, setCategories] = useState<FunctionRequest[]>([]);
 
   // Step 3 — briefing
   const [uniformType, setUniformType]         = useState<'provided' | 'own' | 'none'>('none');
@@ -63,17 +54,17 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
   const [transportDetails, setTransportDetails] = useState('');
   const [extraNotes, setExtraNotes]           = useState('');
 
-  const toggleCategory = (code: string, label: string) => {
+  const toggleCategory = (functionId: string, slug: string, label: string) => {
     setCategories(prev => {
-      const exists = prev.find(c => c.category === code);
-      if (exists) return prev.filter(c => c.category !== code);
-      return [...prev, { category: code, label, quantity: 1 }];
+      const exists = prev.find(c => c.function_id === functionId);
+      if (exists) return prev.filter(c => c.function_id !== functionId);
+      return [...prev, { function_id: functionId, category: slug.toUpperCase(), label, quantity: 1 }];
     });
   };
 
-  const updateQuantity = (code: string, delta: number) => {
+  const updateQuantity = (functionId: string, delta: number) => {
     setCategories(prev => prev.map(c =>
-      c.category === code
+      c.function_id === functionId
         ? { ...c, quantity: Math.max(1, c.quantity + delta) }
         : c
     ));
@@ -333,53 +324,66 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
             </motion.div>
           )}
 
-          {/* ── STEP 2: Categorias ── */}
+          {/* ── STEP 2: Funções ── */}
           {step === 2 && (
             <motion.div key="step2"
               initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
               className="space-y-5">
               <div>
                 <h2 className="font-display text-2xl font-bold text-primary">Profissionais</h2>
-                <p className="text-sm text-on-surface-variant mt-1">Selecione as categorias e quantidades.</p>
+                <p className="text-sm text-on-surface-variant mt-1">Selecione as funções e quantidades.</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                {CATEGORIES.map(({ code, label, icon: Icon }) => {
-                  const selected = categories.find(c => c.category === code);
-                  return (
-                    <div key={code}
-                      className={`rounded-2xl border-2 p-4 cursor-pointer transition-all ${
-                        selected ? 'border-primary bg-primary/5' : 'border-outline-variant bg-white hover:border-primary/40'
-                      }`}
-                      onClick={() => toggleCategory(code, label)}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <Icon className={`w-5 h-5 ${selected ? 'text-primary' : 'text-on-surface-variant'}`} />
-                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                          selected ? 'border-primary bg-primary' : 'border-outline-variant'
-                        }`}>
-                          {selected && <div className="w-2 h-2 rounded-full bg-white" />}
+              {functionsLoading ? (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {functions.map(f => {
+                    const selected = categories.find(c => c.function_id === f.id);
+                    return (
+                      <div key={f.id}
+                        className={`rounded-2xl border-2 p-4 cursor-pointer transition-all ${
+                          selected ? 'border-primary bg-primary/5' : 'border-outline-variant bg-white hover:border-primary/40'
+                        }`}
+                        onClick={() => toggleCategory(f.id, f.slug, f.name)}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-lg">
+                            {f.slug === 'garcom' ? '🍽️' : f.slug === 'dj' ? '🎧' : f.slug === 'seguranca' ? '🛡️' :
+                             f.slug === 'faxineiro' ? '✨' : f.slug === 'fotografo' ? '📸' :
+                             f.slug === 'mestre_cerimonias' ? '🎤' : f.slug === 'produtor' ? '⚙️' : '🔑'}
+                          </span>
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                            selected ? 'border-primary bg-primary' : 'border-outline-variant'
+                          }`}>
+                            {selected && <div className="w-2 h-2 rounded-full bg-white" />}
+                          </div>
                         </div>
+                        <p className={`text-xs font-bold ${selected ? 'text-primary' : 'text-on-surface'}`}>{f.name}</p>
+                        <p className="text-[10px] text-on-surface-variant mt-0.5">
+                          R$ {f.price_mei.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+                        </p>
+
+                        {selected && (
+                          <div className="flex items-center gap-2 mt-3" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => updateQuantity(f.id, -1)}
+                              className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="font-mono font-bold text-sm text-primary w-4 text-center">{selected.quantity}</span>
+                            <button onClick={() => updateQuantity(f.id, +1)}
+                              className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <p className={`text-xs font-bold ${selected ? 'text-primary' : 'text-on-surface'}`}>{label}</p>
-
-                      {selected && (
-                        <div className="flex items-center gap-2 mt-3" onClick={e => e.stopPropagation()}>
-                          <button onClick={() => updateQuantity(code, -1)}
-                            className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="font-mono font-bold text-sm text-primary w-4 text-center">{selected.quantity}</span>
-                          <button onClick={() => updateQuantity(code, +1)}
-                            className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {categories.length > 0 && (
                 <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 flex items-center justify-between">
