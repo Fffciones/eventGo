@@ -18,47 +18,90 @@ export function useAuth() {
       setSession(session);
       setUser(session?.user ?? null);
 
-      // Ao confirmar e-mail, garante que o perfil de cliente/profissional existe
       if (event === 'SIGNED_IN' && session?.user) {
-        const meta = session.user.user_metadata;
-        const uid  = session.user.id;
+        const meta       = session.user.user_metadata;
+        const uid        = session.user.id;
+        const isOAuth    = session.user.app_metadata?.provider === 'google';
 
-        // fallback: se não tiver user_type no metadata, assume CLIENT
-        const userType = meta?.user_type ?? 'CLIENT';
+        // Nome e avatar vindos do Google (ou metadata do cadastro manual)
+        const fullName   = meta?.full_name ?? meta?.name ?? '';
+        const avatarUrl  = meta?.avatar_url ?? meta?.picture ?? null;
 
-        if (userType === 'CLIENT') {
-          supabase.from('clients')
-            .select('id').eq('user_id', uid).single()
-            .then(({ data }) => {
-              if (!data) {
-                // documento único por usuário usando parte do UUID
+        // 1. Garante registro em public.users com dados atualizados
+        supabase.from('users')
+          .select('id, user_type')
+          .eq('id', uid)
+          .single()
+          .then(({ data: existingUser }) => {
+            if (!existingUser) {
+              // Novo usuário OAuth — cria como CLIENT por padrão
+              supabase.from('users').insert({
+                id:         uid,
+                email:      session.user.email ?? '',
+                full_name:  fullName,
+                avatar_url: avatarUrl,
+                user_type:  'CLIENT',
+              }).then(() => {
+                // Cria perfil de cliente
                 const uniqueDoc = uid.replace(/-/g, '').slice(0, 11);
                 supabase.from('clients').insert({
-                  user_id: uid,
-                  document: uniqueDoc,
-                  is_company: false,
+                  user_id:        uid,
+                  document:       uniqueDoc,
+                  is_company:     false,
                   credit_balance: 0,
-                  credit_limit: 0,
+                  credit_limit:   0,
                 });
+              });
+            } else {
+              // Usuário existente — atualiza nome/avatar se veio do Google
+              if (isOAuth && (fullName || avatarUrl)) {
+                supabase.from('users').update({
+                  ...(fullName   ? { full_name:  fullName }  : {}),
+                  ...(avatarUrl  ? { avatar_url: avatarUrl } : {}),
+                }).eq('id', uid);
               }
-            });
-        } else if (meta?.user_type === 'PROFESSIONAL' && meta?.mei_number) {
-          supabase.from('professionals')
-            .select('id').eq('user_id', uid).single()
-            .then(({ data }) => {
-              if (!data) {
-                supabase.from('professionals').insert({
-                  user_id:      uid,
-                  mei_number:   meta.mei_number,
-                  category:     meta.category ?? 'GARCOM',
-                  status:       'PENDING',
-                  stars:        0,
-                  events_count: 0,
-                  hourly_cache: 0,
-                });
+
+              // Garante perfil de cliente se for CLIENT sem registro
+              if (existingUser.user_type === 'CLIENT') {
+                supabase.from('clients')
+                  .select('id').eq('user_id', uid).single()
+                  .then(({ data }) => {
+                    if (!data) {
+                      const uniqueDoc = uid.replace(/-/g, '').slice(0, 11);
+                      supabase.from('clients').insert({
+                        user_id:        uid,
+                        document:       uniqueDoc,
+                        is_company:     false,
+                        credit_balance: 0,
+                        credit_limit:   0,
+                      });
+                    }
+                  });
               }
-            });
-        }
+
+              // Garante perfil de profissional se for PROFESSIONAL sem registro
+              if (existingUser.user_type === 'PROFESSIONAL') {
+                supabase.from('professionals')
+                  .select('id').eq('user_id', uid).single()
+                  .then(({ data }) => {
+                    if (!data) {
+                      supabase.from('professionals').insert({
+                        user_id:      uid,
+                        mei_number:   meta?.mei_number ?? '',
+                        category:     meta?.category ?? 'GARCOM',
+                        status:       'PENDING',
+                        stars:        0,
+                        events_count: 0,
+                        hourly_cache: 0,
+                        is_available: false,
+                        action_radius_km: 10,
+                        online_score: 0,
+                      });
+                    }
+                  });
+              }
+            }
+          });
       }
     });
 
@@ -85,7 +128,16 @@ export function useAuth() {
     return supabase.auth.signInWithPassword({ email, password });
   };
 
+  const signInWithGoogle = async () => {
+    return supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + window.location.pathname,
+      },
+    });
+  };
+
   const signOut = () => supabase.auth.signOut();
 
-  return { session, user, loading, signUp, signIn, signOut };
+  return { session, user, loading, signUp, signIn, signInWithGoogle, signOut };
 }

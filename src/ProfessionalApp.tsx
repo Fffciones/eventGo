@@ -9,11 +9,12 @@ import AgendaView from './components/pro/AgendaView';
 import ProfileViewPro from './components/pro/ProfileViewPro';
 import HomeViewPro from './components/pro/HomeViewPro';
 import { ProNotificationBanners, PostEventModal } from './components/pro/ProNotifications';
+import AuthScreen from './components/auth/AuthScreen';
 
 type ProTab = 'map' | 'invites' | 'agenda' | 'profile';
 
 export default function ProfessionalApp() {
-  const { user, signOut } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const {
     profile, invites, agenda, loading,
     toggleAvailability, respondToInvite, refetch,
@@ -31,6 +32,21 @@ export default function ProfessionalApp() {
   const postEventNotif = notifications.find(
     n => n.kind === 'POST_EVENT' && !postEventDone.has(n.event.event_id)
   );
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <MapPin className="text-primary w-8 h-8 animate-pulse" />
+          <span className="font-display text-xl font-bold text-primary">EventPro Pro</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen onAuthenticated={() => {}} />;
+  }
 
   if (loading) {
     return (

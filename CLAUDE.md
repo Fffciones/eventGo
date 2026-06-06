@@ -109,7 +109,7 @@ supabase/
 - Formulário web (atual)
 - Aplicativo mobile (futuro)
 - **WhatsApp** (prioritário para profissionais — a explorar)
-- **SSO Google / Facebook** (a implementar)
+- **SSO Google** (✅ implementado) / **Facebook** (a implementar))
 
 ## Estado atual (o que está feito)
 - ✅ Schema completo no Supabase
@@ -123,8 +123,9 @@ supabase/
 - ✅ Mapa com vagas abertas em tempo real (Google Maps)
 - ⏳ Múltiplas funções por profissional (banco suporta só 1 hoje)
 - ⏳ Tabela de Funções gerenciável pelo admin
-- ⏳ Painel Administrador
-- ⏳ SSO Google / Facebook
+- ✅ Painel Administrador (`/admin`) — Dashboard, Profissionais, Contratantes, Funções, Eventos
+- ✅ SSO Google (login com Google em ambos os apps)
+- ⏳ SSO Facebook
 - ⏳ Cadastro via WhatsApp
 - ⏳ Messageria contratante ↔ profissional
 - ⏳ Pagamento (Pix)
@@ -152,7 +153,7 @@ Ver `/docs/profissional_interface_rules.md` para especificação completa. Resum
 - ✅ **Fase 3** — Notificações do profissional (web, pendente FCM)
 - ⏳ **Fase 4** — Onboarding por tipo de profissional (MEI ou Diarista)
 - ⏳ **Fase 5** — Múltiplas funções por profissional + Tabela de Funções admin
-- ⏳ **Fase 6** — Painel Administrador
+- ✅ **Fase 6** — Painel Administrador (`/admin`)
 - ⏳ **Fase 7** — Pagamento (documentar antes de implementar)
 - ⏳ **Fase 8** — SSO Google/Facebook + cadastro WhatsApp
 - ⏳ **Fase 9** — GPS tracking mobile + FCM push notifications
