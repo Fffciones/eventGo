@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Eye, EyeOff, ArrowLeft, User, Briefcase, Loader2, CheckCircle } from 'lucide-react';
+import { MapPin, Eye, EyeOff, ArrowLeft, User, Briefcase, Loader2, CheckCircle, Mail } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
 import ProfessionalSignupScreen from './ProfessionalSignupScreen';
 
-type AuthMode = 'landing' | 'login' | 'signup-type' | 'signup-client' | 'signup-professional';
+type AuthMode = 'landing' | 'login' | 'signup-type' | 'signup-client' | 'signup-professional' | 'forgot';
 
 interface AuthScreenProps {
   onAuthenticated: () => void;
 }
 
 export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle, resetPassword } = useAuth();
 
   const [mode, setMode]           = useState<AuthMode>('landing');
   const [showPassword, setShowPassword] = useState(false);
@@ -23,6 +23,20 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   // Login form
   const [loginEmail, setLoginEmail]       = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+
+  // Forgot password
+  const [forgotEmail, setForgotEmail]   = useState('');
+  const [forgotSent,  setForgotSent]    = useState(false);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const { error } = await resetPassword(forgotEmail);
+    if (error) setError(error.message);
+    else setForgotSent(true);
+    setLoading(false);
+  };
 
   // Signup form
   const [signupName, setSignupName]       = useState('');
@@ -210,6 +224,13 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                 <p className="text-error text-xs bg-error-container px-3 py-2 rounded-lg">{error}</p>
               )}
 
+              <div className="flex justify-end">
+                <button type="button" onClick={() => { setMode('forgot'); setError(null); setForgotSent(false); setForgotEmail(loginEmail); }}
+                  className="text-xs text-primary font-medium hover:underline">
+                  Esqueci minha senha
+                </button>
+              </div>
+
               <button type="submit" disabled={loading}
                 className="w-full bg-primary text-on-primary font-semibold py-3.5 rounded-xl shadow-md active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2 mt-2">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Entrar'}
@@ -232,6 +253,64 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                 Criar agora
               </button>
             </p>
+          </motion.div>
+        )}
+
+        {/* ── ESQUECI MINHA SENHA ── */}
+        {mode === 'forgot' && (
+          <motion.div key="forgot"
+            initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
+            className="flex-1 flex flex-col px-6 pt-4 pb-12 max-w-md mx-auto w-full">
+
+            {forgotSent ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center gap-6">
+                <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                  <Mail className="w-10 h-10 text-primary" />
+                </div>
+                <div>
+                  <h2 className="font-display text-3xl font-bold text-primary mb-2">Verifique seu e-mail</h2>
+                  <p className="text-on-surface-variant text-sm max-w-xs mx-auto">
+                    Enviamos um link para <strong>{forgotEmail}</strong>. Clique nele para criar uma nova senha.
+                  </p>
+                </div>
+                <button onClick={() => { setMode('login'); setForgotSent(false); }}
+                  className="w-full max-w-xs bg-primary text-on-primary font-semibold py-3.5 rounded-xl shadow-md active:scale-[0.98] transition-all">
+                  Voltar para o login
+                </button>
+              </div>
+            ) : (
+              <>
+                <h2 className="font-display text-4xl font-bold text-primary mb-1">Esqueceu a senha?</h2>
+                <p className="text-on-surface-variant text-sm mb-8">
+                  Informe seu e-mail e enviaremos um link para criar uma nova senha.
+                </p>
+
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant mb-1.5 uppercase tracking-wide">E-mail</label>
+                    <input type="email" required value={forgotEmail} onChange={e => setForgotEmail(e.target.value)}
+                      placeholder="seu@email.com"
+                      className="w-full px-4 py-3 rounded-xl border border-outline-variant bg-surface-container-low focus:outline-none focus:ring-2 focus:ring-primary/40 text-sm" />
+                  </div>
+
+                  {error && (
+                    <p className="text-error text-xs bg-error-container px-3 py-2 rounded-lg">{error}</p>
+                  )}
+
+                  <button type="submit" disabled={loading}
+                    className="w-full bg-primary text-on-primary font-semibold py-3.5 rounded-xl shadow-md active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2 mt-2">
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Enviar link de recuperação'}
+                  </button>
+                </form>
+
+                <p className="text-center text-sm text-on-surface-variant mt-6">
+                  Lembrou a senha?{' '}
+                  <button onClick={() => { setMode('login'); setError(null); }} className="text-primary font-semibold">
+                    Voltar para o login
+                  </button>
+                </p>
+              </>
+            )}
           </motion.div>
         )}
 
