@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { GoogleMap, useLoadScript, OverlayView } from '@react-google-maps/api';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search,
@@ -8,13 +9,89 @@ import {
   Shield,
   Sparkles,
   Bolt,
-
   Check,
   Compass,
-  X
+  X,
+  Star,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
-import { MAP_BACKGROUND, MAP_MARKERS_PRESET } from '../data';
 import { BookingTeam } from '../types';
+import { useAvailableProfessionalsMap, type ProfessionalPin } from '../hooks/useAvailableProfessionalsMap';
+import type { ProfessionalCategory } from '../lib/database.types';
+
+// ─── Mapa ────────────────────────────────────────────────────────────────────
+
+const MAP_OPTIONS: google.maps.MapOptions = {
+  disableDefaultUI:  true,
+  zoomControl:       true,
+  clickableIcons:    false,
+  styles: [
+    { featureType: 'poi',     elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  ],
+};
+
+const SP_CENTER = { lat: -23.5505, lng: -46.6333 };
+
+// ─── Mapeamento categoria → filtro ───────────────────────────────────────────
+
+const FILTER_CATEGORIES: { label: string; val: ProfessionalCategory; icon: React.ReactNode }[] = [
+  { label: 'Garçons',   val: 'GARCOM',    icon: <Utensils  className="w-4 h-4" /> },
+  { label: 'Segurança', val: 'SEGURANCA', icon: <Shield    className="w-4 h-4" /> },
+  { label: 'DJ',        val: 'DJ',        icon: <Headphones className="w-4 h-4" /> },
+  { label: 'Limpeza',   val: 'FAXINEIRO', icon: <Sparkles  className="w-4 h-4" /> },
+];
+
+const CATEGORY_LABEL: Partial<Record<ProfessionalCategory, string>> = {
+  GARCOM:    'Garçom',
+  DJ:        'DJ',
+  SEGURANCA: 'Segurança',
+  FAXINEIRO: 'Limpeza',
+  FOTOGRAFO: 'Fotógrafo',
+  MESTRE_CERIMONIAS:  'Mestre de Cerimônias',
+  PRODUTOR:           'Produtor',
+  CONTROLADOR_ACESSO: 'Controle de Acesso',
+};
+
+const CATEGORY_ICON: Partial<Record<ProfessionalCategory, React.ReactNode>> = {
+  GARCOM:    <Utensils   className="w-4 h-4" />,
+  DJ:        <Headphones className="w-4 h-4" />,
+  SEGURANCA: <Shield     className="w-4 h-4" />,
+  FAXINEIRO: <Sparkles   className="w-4 h-4" />,
+};
+
+// ─── Pin de profissional no mapa ─────────────────────────────────────────────
+
+function ProPin({ pin, selected, onClick }: {
+  pin: ProfessionalPin;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className="flex flex-col items-center -translate-x-1/2 -translate-y-full cursor-pointer"
+    >
+      <div className={`
+        flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shadow-lg border-2 transition-all
+        ${selected
+          ? 'bg-primary border-primary text-white scale-110'
+          : 'bg-white border-primary text-primary hover:scale-105'}
+      `}>
+        <span className={selected ? 'text-white' : 'text-primary'}>
+          {CATEGORY_ICON[pin.category] ?? <MapPin className="w-4 h-4" />}
+        </span>
+        <span className="text-[11px] font-bold whitespace-nowrap">
+          {pin.full_name.split(' ')[0]}
+        </span>
+      </div>
+      <div className="w-2 h-2 bg-primary rounded-full mt-0.5" />
+    </div>
+  );
+}
+
+// ─── Props ───────────────────────────────────────────────────────────────────
 
 interface HomeViewProps {
   onAddBooking: (newBooking: BookingTeam) => void;
@@ -22,127 +99,132 @@ interface HomeViewProps {
   onNavigate: (tab: 'home' | 'bookings' | 'favorites' | 'profile') => void;
 }
 
+// ─── Componente principal ────────────────────────────────────────────────────
+
 export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: HomeViewProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
-  const [hoveredMarker, setHoveredMarker] = useState<string | null>(null);
-  const [selectedMarker, setSelectedMarker] = useState<typeof MAP_MARKERS_PRESET[0] | null>(null);
-  const [isRequesting, setIsRequesting] = useState(false);
-  const [requestStep, setRequestStep] = useState<'idle' | 'category' | 'locating' | 'success'>('idle');
-  
-  // Custom states for interactive calling
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? '',
+  });
+
+  const [searchQuery,     setSearchQuery]     = useState('');
+  const [selectedFilter,  setSelectedFilter]  = useState<ProfessionalCategory | null>(null);
+  const [selectedPin,     setSelectedPin]     = useState<ProfessionalPin | null>(null);
+  const [center,          setCenter]          = useState(SP_CENTER);
+  const [mapRef,          setMapRef]          = useState<google.maps.Map | null>(null);
+  const onMapLoad = useCallback((map: google.maps.Map) => setMapRef(map), []);
+
+  // Booking imediato
+  const [isRequesting,   setIsRequesting]   = useState(false);
+  const [requestStep,    setRequestStep]    = useState<'idle' | 'category' | 'locating' | 'success'>('idle');
   const [requestCategory, setRequestCategory] = useState<'Garçons' | 'Segurança' | 'DJ' | 'Limpeza'>('Garçons');
-  const [reqStaffCount, setReqStaffCount] = useState(4);
-  const [reqLocation, setReqLocation] = useState('Palácio das Artes, São Paulo');
+  const [reqStaffCount,  setReqStaffCount]  = useState(4);
+  const [reqLocation,    setReqLocation]    = useState('São Paulo, SP');
 
+  // Profissionais disponíveis via banco
+  const { pins, loading } = useAvailableProfessionalsMap(selectedFilter);
 
-  // Simple handlers
-  const handleMarkerClick = (marker: typeof MAP_MARKERS_PRESET[0]) => {
-    setSelectedMarker(marker);
-    if (marker.category === 'Garçom') {
-      // Allow jumping to premium profile of Ricardo
-      // just set chosen marker
-    }
-  };
+  // Geolocalização do contratante
+  useEffect(() => {
+    navigator.geolocation?.getCurrentPosition(
+      ({ coords }) => {
+        const pos = { lat: coords.latitude, lng: coords.longitude };
+        setCenter(pos);
+        mapRef?.panTo(pos);
+      },
+      () => { /* fallback São Paulo */ }
+    );
+  }, [mapRef]);
 
-  const handleStartRequest = () => {
-    setRequestStep('category');
-    setIsRequesting(true);
-  };
+  const handleStartRequest = () => { setRequestStep('category'); setIsRequesting(true); };
 
   const handleConfirmRequest = () => {
     setRequestStep('locating');
-    // Simulate real-time professional location retrieval
     setTimeout(() => {
       setRequestStep('success');
-      // Create new booking team and add to global store
       const categoryMap: Record<string, string> = {
-        'Garçons': 'Equipe de Garçons Auxiliares',
-        'Segurança': 'Equipe de Escolta Tática',
-        'DJ': 'DJ Convidado Adicional',
-        'Limpeza': 'Limpeza Pós-Evento Fast'
+        'Garçons':   'Equipe de Garçons',
+        'Segurança': 'Equipe de Segurança',
+        'DJ':        'DJ Contratado',
+        'Limpeza':   'Equipe de Limpeza',
       };
-
       const newTeam: BookingTeam = {
         id: `created-${Date.now()}`,
-        name: categoryMap[requestCategory] || `${requestCategory} Contratatado`,
+        name: categoryMap[requestCategory] ?? requestCategory,
         status: 'EM TRÂNSITO',
         countConfirmed: reqStaffCount,
         countReserve: 1,
         rating: 4.8,
         distance: '1.5 km',
         eta: '10 min',
-        members: ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&fit=crop']
+        members: [],
       };
-      
       onAddBooking(newTeam);
     }, 3000);
   };
 
-  const filteredMarkers = selectedFilter 
-    ? MAP_MARKERS_PRESET.filter(m => m.category === selectedFilter)
-    : MAP_MARKERS_PRESET;
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  if (loadError) {
+    return (
+      <div className="flex-grow flex items-center justify-center flex-col gap-3 text-on-surface-variant">
+        <AlertCircle className="w-8 h-8 text-red-400" />
+        <p className="text-sm">Erro ao carregar o mapa.</p>
+      </div>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="flex-grow flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex-grow w-full overflow-hidden h-[calc(100vh-140px)] md:h-[calc(100vh-80px)]">
-      {/* Background Overhead Map Image */}
-      <div className="absolute inset-0 w-full h-full bg-surface-dim select-none">
-        <img
-          className="w-full h-full object-cover opacity-90 transition-all duration-500 pointer-events-none"
-          src={MAP_BACKGROUND}
-          alt="Overhead satellite map view of São Paulo metropolitan grid"
-        />
-        <div className="absolute inset-0 bg-primary/10 mix-blend-multiply pointer-events-none" />
-      </div>
 
-      {/* FLOATING MARKERS */}
-      <div className="absolute inset-0 pointer-events-none z-15">
-        {filteredMarkers.map((marker) => {
-          const isHovered = hoveredMarker === marker.id;
-          return (
-            <div
-              key={marker.id}
-              className="absolute pointer-events-auto cursor-pointer group"
-              style={{ top: `${marker.latPercent}%`, left: `${marker.lngPercent}%` }}
-              onMouseEnter={() => setHoveredMarker(marker.id)}
-              onMouseLeave={() => setHoveredMarker(null)}
-              onClick={() => handleMarkerClick(marker)}
-            >
-              <div className="relative flex flex-col items-center -translate-x-1/2 -translate-y-1/2">
-                <div className={`marker-pulse bg-primary text-on-primary w-11 h-11 rounded-full flex items-center justify-center shadow-lg border-2 border-white z-10 transition-transform duration-200 ${isHovered ? 'scale-110' : 'scale-100'}`}>
-                  {marker.iconName === 'Headphones' && <Headphones className="w-5 h-5" />}
-                  {marker.iconName === 'Utensils' && <Utensils className="w-5 h-5" />}
-                  {marker.iconName === 'Shield' && <Shield className="w-5 h-5" />}
-                  {marker.iconName === 'Sparkles' && <Sparkles className="w-5 h-5" />}
-                </div>
-                <div className="mt-1 bg-white/95 backdrop-blur-sm px-2.5 py-0.5 rounded-full shadow-sm border border-outline-variant flex items-center gap-1">
-                  <span className="font-mono text-[10px] font-bold text-primary">{marker.eta}</span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* ── Mapa Google Maps ── */}
+      <GoogleMap
+        mapContainerStyle={{ width: '100%', height: '100%' }}
+        center={center}
+        zoom={13}
+        options={MAP_OPTIONS}
+        onLoad={onMapLoad}
+        onClick={() => setSelectedPin(null)}
+      >
+        {pins.map(pin => (
+          <OverlayView
+            key={pin.professional_id}
+            position={{ lat: pin.lat, lng: pin.lng }}
+            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+          >
+            <ProPin
+              pin={pin}
+              selected={selectedPin?.professional_id === pin.professional_id}
+              onClick={() => {
+                setSelectedPin(pin);
+                mapRef?.panTo({ lat: pin.lat, lng: pin.lng });
+              }}
+            />
+          </OverlayView>
+        ))}
+      </GoogleMap>
 
-      {/* Floating Header Actions / Search Bar */}
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 w-full max-w-[500px] px-margin-mobile z-30">
-        <div className="glass-card shadow-lg rounded-xl flex items-center p-1.5 border border-white/50 transition-all focus-within:ring-2 focus-within:ring-primary/40">
+      {/* ── Barra de busca ── */}
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 w-full max-w-[500px] px-4 z-30">
+        <div className="glass-card shadow-lg rounded-xl flex items-center p-1.5 border border-white/50 focus-within:ring-2 focus-within:ring-primary/40">
           <Search className="text-primary w-5 h-5 ml-3 shrink-0" />
-          <input 
-            className="flex-grow bg-transparent border-none focus:outline-none focus:ring-0 text-on-surface py-2 px-3 text-sm placeholder:text-on-surface-variant" 
-            placeholder="Onde será seu evento?" 
-            type="text"
+          <input
+            className="flex-grow bg-transparent border-none focus:outline-none text-on-surface py-2 px-3 text-sm placeholder:text-on-surface-variant"
+            placeholder="Onde será seu evento?"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={e => setSearchQuery(e.target.value)}
           />
-          <button 
+          <button
             onClick={() => {
-              if (searchQuery.trim().toLowerCase().includes('ricardo')) {
-                onSelectPro('ricardo-1');
-              } else if (searchQuery.trim().toLowerCase().includes('gala')) {
-                onNavigate('bookings');
-              } else {
-                alert(`Buscando por: "${searchQuery}" em São Paulo...`);
+              if (searchQuery.trim()) {
+                alert(`Buscando por: "${searchQuery}"…`);
               }
             }}
             className="bg-primary hover:bg-primary-container text-on-primary rounded-lg px-4 py-2 text-xs font-semibold active:scale-95 transition-transform shrink-0"
@@ -152,10 +234,23 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
         </div>
       </div>
 
-      {/* Marker Detail Overlay Panel when clicked */}
+      {/* ── Contador de profissionais disponíveis ── */}
+      <div className="absolute top-[84px] left-1/2 -translate-x-1/2 z-20">
+        <div className="bg-white/90 backdrop-blur-sm rounded-full px-4 py-1.5 shadow-md border border-slate-100 flex items-center gap-2">
+          {loading
+            ? <Loader2 className="w-3 h-3 text-primary animate-spin" />
+            : <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          }
+          <span className="text-xs font-semibold text-slate-700">
+            {loading ? 'Carregando…' : `${pins.length} profissional${pins.length !== 1 ? 'is' : ''} disponível${pins.length !== 1 ? 'is' : ''}`}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Painel de detalhe do profissional ── */}
       <AnimatePresence>
-        {selectedMarker && (
-          <motion.div 
+        {selectedPin && (
+          <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 30 }}
@@ -164,73 +259,62 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
             <div className="flex justify-between items-start">
               <div className="flex gap-3 items-center">
                 <div className="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center text-primary">
-                  {selectedMarker.iconName === 'Headphones' && <Headphones className="w-5 h-5" />}
-                  {selectedMarker.iconName === 'Utensils' && <Utensils className="w-5 h-5 animate-bounce" />}
-                  {selectedMarker.iconName === 'Shield' && <Shield className="w-5 h-5" />}
-                  {selectedMarker.iconName === 'Sparkles' && <Sparkles className="w-5 h-5" />}
+                  {CATEGORY_ICON[selectedPin.category] ?? <MapPin className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h4 className="font-display font-semibold text-primary">{selectedMarker.category} Disponível</h4>
-                  <p className="text-xs font-mono font-bold text-secondary">Tempo estimado de chegada: {selectedMarker.eta}</p>
+                  <h4 className="font-display font-semibold text-primary">{selectedPin.full_name}</h4>
+                  <p className="text-xs text-on-surface-variant">
+                    {CATEGORY_LABEL[selectedPin.category] ?? selectedPin.category}
+                  </p>
                 </div>
               </div>
-              <button 
-                onClick={() => setSelectedMarker(null)}
-                className="p-1 rounded-full hover:bg-slate-100 text-on-surface-variant transition-colors"
-              >
+              <button onClick={() => setSelectedPin(null)} className="p-1 rounded-full hover:bg-slate-100 text-on-surface-variant">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            
-            <p className="text-sm text-on-surface-variant mt-2.5 bg-surface-container-low p-2.5 rounded-lg border border-outline-variant/30">
-              {selectedMarker.details}
-            </p>
+
+            <div className="flex gap-4 mt-3 text-xs text-on-surface-variant">
+              <span className="flex items-center gap-1">
+                <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+                <strong className="text-on-surface">{selectedPin.stars.toFixed(1)}</strong>
+              </span>
+              <span>{selectedPin.events_count} eventos</span>
+              {selectedPin.hourly_cache > 0 && (
+                <span className="text-primary font-semibold">
+                  R$ {selectedPin.hourly_cache.toFixed(0)}/h
+                </span>
+              )}
+            </div>
 
             <div className="flex justify-end gap-2 mt-3.5">
-              {selectedMarker.category === 'Garçom' && (
-                <button 
-                  onClick={() => {
-                    onSelectPro('ricardo-1');
-                    setSelectedMarker(null);
-                  }}
-                  className="px-3.5 py-1.5 border border-primary text-primary hover:bg-primary/5 rounded-lg text-xs font-semibold transition-all"
-                >
-                  Ver Perfil Ricardo
-                </button>
-              )}
-              <button 
+              <button
                 onClick={() => {
-                  setRequestCategory(selectedMarker.category as any);
+                  setRequestCategory('Garçons');
                   handleStartRequest();
-                  setSelectedMarker(null);
+                  setSelectedPin(null);
                 }}
                 className="px-4 py-1.5 bg-primary hover:bg-primary-container text-on-primary rounded-lg text-xs font-semibold shadow-sm transition-all"
               >
-                Solicitar Este Serviço
+                Solicitar Este Profissional
               </button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Category Bottom-sheet context & Booking overlays */}
-      <div className="absolute bottom-6 w-full px-margin-mobile z-20">
+      {/* ── Bottom bar: filtros + botão de emergência ── */}
+      <div className="absolute bottom-6 w-full px-4 z-20">
         <div className="max-w-[700px] mx-auto flex flex-col gap-4">
-          
-          {/* Quick Category Filters row */}
+
+          {/* Filtros de categoria */}
           <div className="flex gap-2.5 overflow-x-auto hide-scrollbar py-1 select-none">
-            {[
-              { label: 'Garçons', val: 'Garçom', icon: <Utensils className="w-4 h-4" /> },
-              { label: 'Segurança', val: 'Segurança', icon: <Shield className="w-4 h-4" /> },
-              { label: 'DJ', val: 'DJ', icon: <Headphones className="w-4 h-4" /> },
-              { label: 'Limpeza', val: 'Limpeza', icon: <Sparkles className="w-4 h-4" /> }
-            ].map((cat) => (
-              <button 
+            {FILTER_CATEGORIES.map(cat => (
+              <button
                 key={cat.label}
                 onClick={() => setSelectedFilter(selectedFilter === cat.val ? null : cat.val)}
                 className={`flex-shrink-0 flex items-center gap-1.5 shadow-sm border rounded-full px-5 py-2.5 transition-all text-xs font-medium active:scale-95 ${
-                  selectedFilter === cat.val 
-                    ? 'bg-primary border-primary text-on-primary' 
+                  selectedFilter === cat.val
+                    ? 'bg-primary border-primary text-on-primary'
                     : 'bg-white border-outline-variant/40 text-on-surface hover:bg-surface-container-high'
                 }`}
               >
@@ -241,7 +325,7 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
               </button>
             ))}
             {selectedFilter && (
-              <button 
+              <button
                 onClick={() => setSelectedFilter(null)}
                 className="flex-shrink-0 bg-red-100 text-red-700 px-3 py-2 rounded-full text-xs font-bold active:scale-95"
               >
@@ -259,7 +343,7 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
               <div className="text-left">
                 <h3 className="font-display font-bold text-lg md:text-xl text-red-700 leading-tight">Contratação Imediata</h3>
                 <p className="text-xs text-red-500 flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-ping" />
                   Desfalque na sua equipe? Chame agora!
                 </p>
               </div>
@@ -274,22 +358,19 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
         </div>
       </div>
 
-      {/* Interactive Booking Flow Dialog */}
+      {/* ── Modal de contratação imediata ── */}
       <AnimatePresence>
         {isRequesting && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-white rounded-2xl p-6 shadow-2xl border border-outline-variant max-w-md w-full relative space-y-4 text-left"
             >
-              <button 
-                onClick={() => {
-                  setIsRequesting(false);
-                  setRequestStep('idle');
-                }}
-                className="absolute top-4 right-4 text-on-surface-variant hover:bg-slate-100 p-1.5 rounded-full transition-colors"
+              <button
+                onClick={() => { setIsRequesting(false); setRequestStep('idle'); }}
+                className="absolute top-4 right-4 text-on-surface-variant hover:bg-slate-100 p-1.5 rounded-full"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -300,8 +381,8 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
                     <Bolt className="w-6 h-6 text-secondary" />
                     <h3 className="font-display font-extrabold text-xl">Novo Pedido Expresso</h3>
                   </div>
-                  <p className="text-xs text-on-surface-variant">Selecione as especificações rápidas para a sua equipe eventual.</p>
-                  
+                  <p className="text-xs text-on-surface-variant">Especificações rápidas para sua equipe eventual.</p>
+
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 mb-1">CATEGORIA</label>
@@ -312,8 +393,8 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
                             type="button"
                             onClick={() => setRequestCategory(cat)}
                             className={`py-2 px-3 text-xs rounded-xl border font-semibold text-center transition-all ${
-                              requestCategory === cat 
-                                ? 'bg-primary-container/20 border-primary text-primary' 
+                              requestCategory === cat
+                                ? 'bg-primary-container/20 border-primary text-primary'
                                 : 'bg-slate-50 border-outline-variant/60 text-on-surface'
                             }`}
                           >
@@ -324,18 +405,16 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">QUANTIDADE DE PROFISSIONAIS ({reqStaffCount})</label>
-                      <input 
-                        type="range" 
-                        min="1" 
-                        max="12" 
-                        value={reqStaffCount}
-                        onChange={(e) => setReqStaffCount(Number(e.target.value))}
+                      <label className="block text-xs font-bold text-slate-500 mb-1">
+                        QUANTIDADE ({reqStaffCount})
+                      </label>
+                      <input
+                        type="range" min="1" max="12" value={reqStaffCount}
+                        onChange={e => setReqStaffCount(Number(e.target.value))}
                         className="w-full accent-primary h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer"
                       />
                       <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                        <span>1 Profissional</span>
-                        <span>12 Profissionais</span>
+                        <span>1</span><span>12 Profissionais</span>
                       </div>
                     </div>
 
@@ -343,24 +422,22 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
                       <label className="block text-xs font-bold text-slate-500 mb-1">LOCAL DO EVENTO</label>
                       <div className="relative">
                         <MapPin className="absolute left-3 top-2.5 text-slate-400 w-4 h-4" />
-                        <input 
-                          type="text" 
-                          value={reqLocation} 
-                          onChange={(e) => setReqLocation(e.target.value)}
+                        <input
+                          type="text"
+                          value={reqLocation}
+                          onChange={e => setReqLocation(e.target.value)}
                           className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-outline-variant/70 focus:ring-1 focus:ring-primary focus:outline-none"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-2">
-                    <button
-                      onClick={handleConfirmRequest}
-                      className="w-full py-3 bg-primary hover:bg-primary-container text-on-primary font-bold text-xs rounded-xl shadow-lg hover:shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                    >
-                      <span>Solicitar Envio de Equipe</span>
-                    </button>
-                  </div>
+                  <button
+                    onClick={handleConfirmRequest}
+                    className="w-full py-3 bg-primary hover:bg-primary-container text-on-primary font-bold text-xs rounded-xl shadow-lg active:scale-[0.98] transition-all"
+                  >
+                    Solicitar Envio de Equipe
+                  </button>
                 </>
               )}
 
@@ -371,8 +448,10 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
                     <Compass className="w-7 h-7 text-secondary absolute inset-0 m-auto animate-pulse" />
                   </div>
                   <div>
-                    <h4 className="font-display font-extrabold text-lg text-primary">Localizando Profissionais...</h4>
-                    <p className="text-xs text-on-surface-variant max-w-[280px] mx-auto mt-1">Conectando aos garçons e staffs de alta reputação disponíveis em SP.</p>
+                    <h4 className="font-display font-extrabold text-lg text-primary">Localizando Profissionais…</h4>
+                    <p className="text-xs text-on-surface-variant max-w-[280px] mx-auto mt-1">
+                      Conectando aos profissionais de alta reputação disponíveis.
+                    </p>
                   </div>
                 </div>
               )}
@@ -385,25 +464,18 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
                   <div>
                     <h4 className="font-display font-extrabold text-xl text-primary">Solicitação Confirmada!</h4>
                     <p className="text-xs text-on-surface-variant max-w-[300px] mx-auto mt-1">
-                      Sua equipe de {requestCategory} com {reqStaffCount} profissionais já está a caminho. Consulte a aba de agendamentos para acompanhar em tempo real.
+                      Equipe de {requestCategory} com {reqStaffCount} profissional{reqStaffCount !== 1 ? 'is' : ''} a caminho.
                     </p>
                   </div>
-                  <div className="pt-2 flex gap-2">
+                  <div className="flex gap-2 pt-2">
                     <button
-                      onClick={() => {
-                        setIsRequesting(false);
-                        setRequestStep('idle');
-                      }}
+                      onClick={() => { setIsRequesting(false); setRequestStep('idle'); }}
                       className="flex-1 py-2.5 border border-outline-variant text-on-surface hover:bg-slate-50 text-xs font-semibold rounded-xl"
                     >
                       Fechar
                     </button>
                     <button
-                      onClick={() => {
-                        setIsRequesting(false);
-                        setRequestStep('idle');
-                        onNavigate('bookings');
-                      }}
+                      onClick={() => { setIsRequesting(false); setRequestStep('idle'); onNavigate('bookings'); }}
                       className="flex-1 py-2.5 bg-primary hover:bg-primary-container text-on-primary text-xs font-semibold rounded-xl shadow-md"
                     >
                       Acompanhar
@@ -411,12 +483,10 @@ export default function HomeView({ onAddBooking, onSelectPro, onNavigate }: Home
                   </div>
                 </div>
               )}
-
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
     </div>
   );
 }
