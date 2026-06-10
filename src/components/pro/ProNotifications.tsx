@@ -21,7 +21,7 @@ export function ProNotificationBanners({ notifications, onDismiss, onGoToAgenda 
       <AnimatePresence initial={false}>
         {notifications.map(n => (
           <Banner
-            key={`${n.kind}-${n.event.bp_id}`}
+            key={`${n.kind}-${n.event.vaga_id}`}
             notification={n}
             onDismiss={() => onDismiss(n.event.event_id)}
             onGoToAgenda={onGoToAgenda}

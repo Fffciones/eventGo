@@ -47,9 +47,9 @@ export default function HomeViewPro({ profile }: Props) {
     ? { lat: profile.home_lat, lng: profile.home_lng }
     : { lat: -23.5505, lng: -46.6333 }; // São Paulo fallback
 
-  const { bookings, loading } = useOpenBookings(
+  const { bookings, loading, acceptVaga } = useOpenBookings(
     profile.professional_id,
-    profile.category,
+    profile.functions.map(f => f.id),
     profile.home_lat,
     profile.home_lng,
     profile.action_radius_km,
@@ -96,13 +96,13 @@ export default function HomeViewPro({ profile }: Props) {
         {/* Pins de eventos */}
         {bookings.map(b => (
           <OverlayView
-            key={b.booking_id}
+            key={b.group_key}
             position={{ lat: b.lat, lng: b.lng }}
             mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
           >
             <EventPin
               booking={b}
-              selected={selected?.booking_id === b.booking_id}
+              selected={selected?.group_key === b.group_key}
               onClick={() => handlePinClick(b)}
             />
           </OverlayView>
@@ -131,14 +131,22 @@ export default function HomeViewPro({ profile }: Props) {
       <AnimatePresence>
         {selected && (
           <motion.div
-            key={selected.booking_id}
+            key={selected.group_key}
             initial={{ y: 120, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 120, opacity: 0 }}
             transition={{ type: 'spring', damping: 22, stiffness: 260 }}
             className="absolute bottom-4 left-4 right-4 z-20"
           >
-            <EventCard booking={selected} onClose={() => setSelected(null)} />
+            <EventCard
+              booking={selected}
+              onClose={() => setSelected(null)}
+              onAccept={async () => {
+                const ok = await acceptVaga(selected.vaga_id);
+                setSelected(null);
+                if (!ok) alert('Esta vaga acabou de ser preenchida por outro profissional.');
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -168,7 +176,7 @@ function EventPin({ booking: b, selected, onClick }: {
       }`}>
         <span className="text-sm">{emoji}</span>
         <span className="text-xs font-bold whitespace-nowrap">
-          R$ {Math.round(b.amount / b.slots_total).toLocaleString('pt-BR')}
+          R$ {Math.round(b.amount).toLocaleString('pt-BR')}
         </span>
         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
           selected ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary'
@@ -183,11 +191,12 @@ function EventPin({ booking: b, selected, onClick }: {
 
 // ── Card de detalhe ──────────────────────────────────────────────────────────
 
-function EventCard({ booking: b, onClose }: { booking: OpenBooking; onClose: () => void }) {
+function EventCard({ booking: b, onClose, onAccept }: { booking: OpenBooking; onClose: () => void; onAccept: () => Promise<void> }) {
+  const [accepting, setAccepting] = useState(false);
   const startsAt  = new Date(b.starts_at);
   const endsAt    = new Date(b.ends_at);
   const durationH = Math.round((endsAt.getTime() - startsAt.getTime()) / 3_600_000);
-  const perSlot   = b.slots_total > 0 ? b.amount / b.slots_total : b.amount;
+  const perSlot   = b.amount;  // preço já é por vaga
 
   const dateLabel = startsAt.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
   const timeLabel = `${startsAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} – ${endsAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
@@ -223,8 +232,16 @@ function EventCard({ booking: b, onClose }: { booking: OpenBooking; onClose: () 
         </div>
       )}
 
-      {/* Botão navegar */}
-      <div className="px-4 pb-4">
+      {/* Ações */}
+      <div className="px-4 pb-4 flex flex-col gap-2">
+        <button
+          disabled={accepting}
+          onClick={async () => { setAccepting(true); try { await onAccept(); } finally { setAccepting(false); } }}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-60 shadow-sm"
+        >
+          {accepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+          Aceitar vaga
+        </button>
         <a
           href={`https://www.google.com/maps/dir/?api=1&destination=${b.lat},${b.lng}`}
           target="_blank"

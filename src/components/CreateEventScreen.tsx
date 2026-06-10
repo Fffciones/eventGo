@@ -37,6 +37,7 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
   const [date, setDate]           = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime]     = useState('');
+  const [arrivalTime, setArrivalTime] = useState('');
 
   const { geocode, loading: geoLoading, error: geoError } = useGeocoding();
 
@@ -53,6 +54,14 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
   const [hasTransport, setHasTransport]       = useState(false);
   const [transportDetails, setTransportDetails] = useState('');
   const [extraNotes, setExtraNotes]           = useState('');
+
+  // Step 3 — responsáveis no local (doc 1.4.1)
+  const [resp1Name, setResp1Name]         = useState('');
+  const [resp1Role, setResp1Role]         = useState('');
+  const [resp1Whats, setResp1Whats]       = useState('');
+  const [resp2Name, setResp2Name]         = useState('');
+  const [resp2Role, setResp2Role]         = useState('');
+  const [resp2Whats, setResp2Whats]       = useState('');
 
   const toggleCategory = (functionId: string, slug: string, label: string) => {
     setCategories(prev => {
@@ -92,6 +101,10 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
         ? new Date(new Date(`${date}T${endTime}:00`).getTime() + 24 * 60 * 60 * 1000)
         : new Date(`${date}T${endTime}:00`);
       const endsAt = endDate.toISOString();
+      // Chegada da equipe (opcional) — no mesmo dia do evento, antes do início
+      const teamArrivalAt = arrivalTime
+        ? new Date(`${date}T${arrivalTime}:00`).toISOString()
+        : null;
 
       // Criar evento
       // Geocodificar endereço se ainda não foi feito
@@ -111,6 +124,13 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
           location:      `POINT(${geo.lng} ${geo.lat})`,
           starts_at:     startsAt,
           ends_at:       endsAt,
+          team_arrival_at: teamArrivalAt,
+          responsible_1_name:     resp1Name.trim() || null,
+          responsible_1_role:     resp1Role.trim() || null,
+          responsible_1_whatsapp: resp1Whats.trim() || null,
+          responsible_2_name:     resp2Name.trim() || null,
+          responsible_2_role:     resp2Role.trim() || null,
+          responsible_2_whatsapp: resp2Whats.trim() || null,
           status:        'SCHEDULED',
           briefing: {
             uniform:      { type: uniformType, details: uniformDetails || null },
@@ -125,18 +145,24 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
 
       if (eventError) throw eventError;
 
-      // Criar bookings por categoria (sem disparar convites ainda)
-      for (const cat of categories) {
-        await supabase.from('bookings').insert({
-          event_id:       eventData.id,
-          category:       cat.category,
-          quantity:       cat.quantity,
-          multiplier_type: 'NORMAL',
-          total_amount:   0, // calculado quando profissionais aceitarem
-          commission_pct: 15,
-          status:         'PENDING',
-          search_radius_km: 5,
-        });
+      // Criar uma VAGA individual por posição (doc 1.4.2 — 1 subprocesso por vaga)
+      const vagaRows = categories.flatMap(cat => {
+        const fn = functions.find(f => f.id === cat.function_id);
+        return Array.from({ length: cat.quantity }, () => ({
+          event_id:        eventData.id,
+          function_id:     cat.function_id,
+          category:        cat.category,        // legado (slug em uppercase)
+          status:          'OPEN' as const,
+          offer_phase:     'OPEN_POOL' as const, // Etapa 3 introduz a oferta direcionada
+          price:           fn?.price_mei ?? null,
+          base_pay:        fn?.base_pay_mei ?? null,
+          multiplier_type: 'NORMAL' as const,
+        }));
+      });
+
+      if (vagaRows.length > 0) {
+        const { error: vagasError } = await supabase.from('vagas').insert(vagaRows);
+        if (vagasError) throw vagasError;
       }
 
       setSuccess(true);
@@ -312,6 +338,17 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
                   </div>
                 </Field>
               </div>
+
+              <Field label="Chegada da equipe (opcional)">
+                <div className="relative">
+                  <Clock className="absolute left-3 top-3 w-4 h-4 text-on-surface-variant" />
+                  <input type="time" value={arrivalTime} onChange={e => setArrivalTime(e.target.value)}
+                    className={`${inputClass} pl-9`} />
+                </div>
+                <p className="text-[11px] text-on-surface-variant mt-1">
+                  Horário em que os profissionais devem chegar ao local (antes do início).
+                </p>
+              </Field>
 
               {crossesMidnight && (
                 <p className="text-xs text-primary bg-primary/5 border border-primary/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
@@ -500,6 +537,35 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
                 )}
               </div>
 
+              {/* Responsáveis no local */}
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">
+                  👤 Responsáveis no local (opcional)
+                </label>
+                <div className="space-y-2 rounded-xl border border-outline-variant/40 p-3">
+                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">Responsável 1</p>
+                  <input type="text" value={resp1Name} onChange={e => setResp1Name(e.target.value)}
+                    placeholder="Nome" className={IC} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="text" value={resp1Role} onChange={e => setResp1Role(e.target.value)}
+                      placeholder="Função (ex: Coordenador)" className={IC} />
+                    <input type="tel" value={resp1Whats} onChange={e => setResp1Whats(e.target.value)}
+                      placeholder="WhatsApp" className={IC} />
+                  </div>
+                </div>
+                <div className="space-y-2 rounded-xl border border-outline-variant/40 p-3">
+                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">Responsável 2</p>
+                  <input type="text" value={resp2Name} onChange={e => setResp2Name(e.target.value)}
+                    placeholder="Nome" className={IC} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="text" value={resp2Role} onChange={e => setResp2Role(e.target.value)}
+                      placeholder="Função" className={IC} />
+                    <input type="tel" value={resp2Whats} onChange={e => setResp2Whats(e.target.value)}
+                      placeholder="WhatsApp" className={IC} />
+                  </div>
+                </div>
+              </div>
+
               {/* Observações gerais */}
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-wide">
@@ -549,6 +615,12 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
                       {crossesMidnight && <span className="text-xs text-primary ml-1">(dia seguinte)</span>}
                     </p>
                   </div>
+                  {arrivalTime && (
+                    <div>
+                      <p className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wide">Chegada</p>
+                      <p className="text-sm font-semibold text-on-surface mt-0.5">{arrivalTime}</p>
+                    </div>
+                  )}
                 </div>
                 <div className="p-4 space-y-2">
                   <p className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wide">Equipe solicitada</p>
@@ -563,6 +635,23 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
                     <span className="font-mono text-sm font-bold text-primary">{totalProfessionals} profissionais</span>
                   </div>
                 </div>
+
+                {/* Responsáveis no resumo */}
+                {(resp1Name.trim() || resp2Name.trim()) && (
+                  <div className="p-4 space-y-1.5">
+                    <p className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wide">Responsáveis</p>
+                    {resp1Name.trim() && (
+                      <p className="text-xs text-on-surface">
+                        👤 {resp1Name}{resp1Role && ` — ${resp1Role}`}{resp1Whats && ` · ${resp1Whats}`}
+                      </p>
+                    )}
+                    {resp2Name.trim() && (
+                      <p className="text-xs text-on-surface">
+                        👤 {resp2Name}{resp2Role && ` — ${resp2Role}`}{resp2Whats && ` · ${resp2Whats}`}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Briefing no resumo */}
                 {(uniformType !== 'none' || mealType !== 'none' || hasMeetingPoint || hasTransport || extraNotes) && (

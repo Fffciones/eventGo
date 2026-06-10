@@ -40,7 +40,7 @@ export default function Dashboard() {
         supabase.from('clients').select('*', { count: 'exact', head: true }),
         supabase.from('events').select('*', { count: 'exact', head: true }),
         supabase.from('events').select('*', { count: 'exact', head: true }).eq('status', 'IN_PROGRESS'),
-        supabase.from('bookings').select('total_amount').eq('status', 'COMPLETED'),
+        supabase.from('vagas').select('price').eq('status', 'FINISHED'),
         supabase.from('events')
           .select('id, name, starts_at, status, clients(users(full_name))')
           .order('created_at', { ascending: false })
@@ -48,7 +48,7 @@ export default function Dashboard() {
       ]);
 
       const totalRevenue = (revenueData ?? []).reduce(
-        (sum, b) => sum + (b.total_amount ?? 0), 0
+        (sum, v) => sum + (v.price ?? 0), 0
       );
 
       setStats({

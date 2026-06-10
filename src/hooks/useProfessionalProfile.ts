@@ -39,8 +39,7 @@ export interface ProfessionalProfile {
 }
 
 export interface PendingInvite {
-  bp_id:          string;
-  booking_id:     string;
+  vaga_id:        string;
   event_id:       string;
   event_name:     string;
   location_name:  string;
@@ -59,8 +58,7 @@ export interface PendingInvite {
 }
 
 export interface AgendaEvent {
-  bp_id:         string;
-  booking_id:    string;
+  vaga_id:       string;
   event_id:      string;
   event_name:    string;
   location_name: string;
@@ -68,7 +66,7 @@ export interface AgendaEvent {
   ends_at:       string;
   category:      string;
   amount:        number;
-  status:        string;
+  status:        string;   // worker_status (ACCEPTED/IN_TRANSIT/CHECKED_IN/CHECKED_OUT)
   briefing:      any;
   gps_active:    boolean;
   checkin_at:    string | null;
@@ -87,14 +85,11 @@ export function useProfessionalProfile(userId?: string) {
     fetchAll();
     updateLastSeen();
 
-    // Realtime — novos convites chegando
+    // Realtime — convites/vagas mudando
     const channel = supabase
-      .channel(`pro-invites:${userId}`)
+      .channel(`pro-vagas:${userId}`)
       .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'booking_professionals',
-      }, () => fetchInvites())
-      .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'booking_professionals',
+        event: '*', schema: 'public', table: 'vagas',
       }, () => { fetchInvites(); fetchAgenda(); })
       .subscribe();
 
@@ -176,27 +171,22 @@ export function useProfessionalProfile(userId?: string) {
     if (!p) return;
 
     const { data } = await supabase
-      .from('booking_professionals')
+      .from('vagas')
       .select(`
-        id, booking_id, amount, status,
-        bookings (
-          id, category, multiplier_type, event_id,
-          events (
-            id, name, location_name, starts_at, ends_at, briefing,
-            clients ( users ( full_name ) )
-          )
+        id, category, base_pay, multiplier_type, event_id,
+        events (
+          id, name, location_name, starts_at, ends_at, briefing,
+          clients ( users ( full_name ) )
         )
       `)
       .eq('professional_id', p.id)
-      .eq('status', 'INVITED');
+      .eq('worker_status', 'INVITED');
 
     setInvites(
-      (data ?? []).map((bp: any) => {
-        const b = bp.bookings;
-        const e = b?.events;
+      (data ?? []).map((v: any) => {
+        const e = v.events;
         return {
-          bp_id:         bp.id,
-          booking_id:    bp.booking_id,
+          vaga_id:       v.id,
           event_id:      e?.id,
           event_name:    e?.name ?? '—',
           location_name: e?.location_name ?? '—',
@@ -204,9 +194,9 @@ export function useProfessionalProfile(userId?: string) {
           event_lng:     null,
           starts_at:     e?.starts_at,
           ends_at:       e?.ends_at,
-          category:      b?.category ?? '',
-          amount:        bp.amount ?? 0,
-          multiplier:    b?.multiplier_type ?? 'NORMAL',
+          category:      v.category ?? '',
+          amount:        Number(v.base_pay ?? 0),
+          multiplier:    v.multiplier_type ?? 'NORMAL',
           briefing:      e?.briefing ?? null,
           client_name:   e?.clients?.users?.full_name ?? 'Cliente',
           distance_km:   null,
@@ -228,37 +218,32 @@ export function useProfessionalProfile(userId?: string) {
     if (!p) return;
 
     const { data } = await supabase
-      .from('booking_professionals')
+      .from('vagas')
       .select(`
-        id, booking_id, amount, status, gps_active, checkin_at, checkout_at,
-        bookings (
-          category,
-          events ( id, name, location_name, starts_at, ends_at, briefing )
-        )
+        id, category, base_pay, worker_status, gps_active, checkin_at, checkout_at, event_id,
+        events ( id, name, location_name, starts_at, ends_at, briefing )
       `)
       .eq('professional_id', p.id)
-      .in('status', ['ACCEPTED','IN_TRANSIT','CHECKED_IN','CHECKED_OUT'])
+      .in('worker_status', ['ACCEPTED','IN_TRANSIT','CHECKED_IN','CHECKED_OUT'])
       .order('created_at', { ascending: false });
 
     setAgenda(
-      (data ?? []).map((bp: any) => {
-        const b = bp.bookings;
-        const e = b?.events;
+      (data ?? []).map((v: any) => {
+        const e = v.events;
         return {
-          bp_id:         bp.id,
-          booking_id:    bp.booking_id,
+          vaga_id:       v.id,
           event_id:      e?.id,
           event_name:    e?.name ?? '—',
           location_name: e?.location_name ?? '—',
           starts_at:     e?.starts_at,
           ends_at:       e?.ends_at,
-          category:      b?.category ?? '',
-          amount:        bp.amount ?? 0,
-          status:        bp.status,
+          category:      v.category ?? '',
+          amount:        Number(v.base_pay ?? 0),
+          status:        v.worker_status,
           briefing:      e?.briefing ?? null,
-          gps_active:    bp.gps_active ?? false,
-          checkin_at:    bp.checkin_at,
-          checkout_at:   bp.checkout_at,
+          gps_active:    v.gps_active ?? false,
+          checkin_at:    v.checkin_at,
+          checkout_at:   v.checkout_at,
         };
       })
     );
@@ -283,15 +268,14 @@ export function useProfessionalProfile(userId?: string) {
   };
 
   // ── Aceitar / recusar convite ─────────────────────────────────
-  const respondToInvite = async (bpId: string, accept: boolean) => {
-    const newStatus = accept ? 'ACCEPTED' : 'DECLINED';
-    const { error } = await supabase
-      .from('booking_professionals')
-      .update({ status: newStatus })
-      .eq('id', bpId);
+  const respondToInvite = async (vagaId: string, accept: boolean) => {
+    const { error } = await supabase.rpc('respond_to_vaga_invite', {
+      p_vaga_id: vagaId,
+      p_accept:  accept,
+    });
 
     if (error) throw error;
-    setInvites(prev => prev.filter(i => i.bp_id !== bpId));
+    setInvites(prev => prev.filter(i => i.vaga_id !== vagaId));
     if (accept) await fetchAgenda();
   };
 

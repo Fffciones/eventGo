@@ -9,6 +9,9 @@ export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED
 export type BookingProfessionalStatus =
   | 'INVITED' | 'ACCEPTED' | 'DECLINED' | 'IN_TRANSIT'
   | 'CHECKED_IN' | 'CHECKED_OUT' | 'NO_SHOW';
+// Ciclo de vida da vaga (doc 1.4.2)
+export type VagaStatus = 'OPEN' | 'FILLED' | 'IN_PROGRESS' | 'CLOSING' | 'FINISHED' | 'CANCELLED';
+export type VagaOfferPhase = 'DIRECTED' | 'OPEN_POOL';
 export type TransactionType =
   | 'BOOKING' | 'COMMISSION' | 'REFUND' | 'CREDIT_PURCHASE' | 'SIGNUP_BONUS' | 'EMERGENCY_FEE';
 export type PixStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
@@ -72,7 +75,15 @@ export interface Database {
           location: string;
           starts_at: string;
           ends_at: string;
+          team_arrival_at: string | null;
+          responsible_1_name: string | null;
+          responsible_1_role: string | null;
+          responsible_1_whatsapp: string | null;
+          responsible_2_name: string | null;
+          responsible_2_role: string | null;
+          responsible_2_whatsapp: string | null;
           status: string;
+          briefing: Json | null;
           created_at: string;
         };
         Insert: Omit<Database['public']['Tables']['events']['Row'], 'created_at'>;
@@ -94,6 +105,38 @@ export interface Database {
         };
         Insert: Omit<Database['public']['Tables']['bookings']['Row'], 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['bookings']['Insert']>;
+      };
+      vagas: {
+        Row: {
+          id: string;
+          event_id: string;
+          function_id: string | null;
+          category: ProfessionalCategory | null;
+          status: VagaStatus;
+          offer_phase: VagaOfferPhase;
+          professional_id: string | null;
+          worker_status: BookingProfessionalStatus | null;
+          price: number | null;
+          base_pay: number | null;
+          multiplier_type: PriceMultiplierType;
+          invited_at: string | null;
+          responded_at: string | null;
+          gps_active: boolean;
+          transit_requested_at: string | null;
+          alert_60_sent: boolean;
+          checkin_at: string | null;
+          checkout_at: string | null;
+          no_show_flag: boolean;
+          early_checkin: boolean;
+          early_minutes: number | null;
+          punctuality_score: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['vagas']['Row'],
+          'id' | 'created_at' | 'updated_at' | 'punctuality_score'>
+          & { id?: string };
+        Update: Partial<Database['public']['Tables']['vagas']['Insert']>;
       };
       booking_professionals: {
         Row: {
@@ -198,24 +241,32 @@ export interface Database {
         Returns: void;
       };
       handle_no_show: {
-        Args: { p_booking_professional_id: string };
+        Args: { p_vaga_id: string };
         Returns: string;
       };
       activate_transit: {
-        Args: { p_booking_professional_id: string };
+        Args: { p_vaga_id: string };
         Returns: void;
       };
       request_transit_activation: {
-        Args: { p_booking_professional_id: string };
+        Args: { p_vaga_id: string };
         Returns: void;
       };
       professional_checkin: {
-        Args: { p_booking_professional_id: string };
+        Args: { p_vaga_id: string };
         Returns: void;
       };
       trigger_emergency_replacement: {
-        Args: { p_booking_professional_id: string };
+        Args: { p_vaga_id: string };
         Returns: string;
+      };
+      accept_vaga: {
+        Args: { p_vaga_id: string };
+        Returns: boolean;
+      };
+      respond_to_vaga_invite: {
+        Args: { p_vaga_id: string; p_accept: boolean };
+        Returns: void;
       };
     };
   };

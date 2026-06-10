@@ -72,7 +72,7 @@ export default function AgendaView({ agenda, onRefetch }: Props) {
         </div>
       ) : (
         filtered.map(ev => (
-          <AgendaCard key={ev.bp_id} event={ev} onRefetch={onRefetch} />
+          <AgendaCard key={ev.vaga_id} event={ev} onRefetch={onRefetch} />
         ))
       )}
     </div>
@@ -94,18 +94,27 @@ function AgendaCard({ event, onRefetch }: { event: AgendaEvent; onRefetch: () =>
   const briefing = event.briefing ?? {};
   const hasBriefing = Object.keys(briefing).length > 0;
 
-  const updateStatus = async (newStatus: string, extra?: Record<string, unknown>) => {
+  const runAction = async (fn: () => Promise<unknown>) => {
     setLoading(true);
     try {
-      await supabase
-        .from('booking_professionals')
-        .update({ status: newStatus, ...extra })
-        .eq('id', event.bp_id);
+      await fn();
       onRefetch();
     } finally {
       setLoading(false);
     }
   };
+
+  const activateTransit = () =>
+    runAction(() => supabase.rpc('activate_transit', { p_vaga_id: event.vaga_id }));
+
+  const checkIn = () =>
+    runAction(() => supabase.rpc('professional_checkin', { p_vaga_id: event.vaga_id }));
+
+  const checkOut = () =>
+    runAction(() => supabase
+      .from('vagas')
+      .update({ worker_status: 'CHECKED_OUT', status: 'CLOSING', checkout_at: new Date().toISOString(), gps_active: false })
+      .eq('id', event.vaga_id));
 
   const actionButton = () => {
     if (event.status === 'ACCEPTED') return (
@@ -114,7 +123,7 @@ function AgendaCard({ event, onRefetch }: { event: AgendaEvent; onRefetch: () =>
         label="Estou a caminho"
         color="bg-amber-500 hover:bg-amber-600"
         loading={loading}
-        onClick={() => updateStatus('IN_TRANSIT', { gps_active: true })}
+        onClick={activateTransit}
       />
     );
     if (event.status === 'IN_TRANSIT') return (
@@ -123,7 +132,7 @@ function AgendaCard({ event, onRefetch }: { event: AgendaEvent; onRefetch: () =>
         label="Fiz check-in"
         color="bg-green-600 hover:bg-green-700"
         loading={loading}
-        onClick={() => updateStatus('CHECKED_IN', { checkin_at: new Date().toISOString() })}
+        onClick={checkIn}
       />
     );
     if (event.status === 'CHECKED_IN') return (
@@ -132,7 +141,7 @@ function AgendaCard({ event, onRefetch }: { event: AgendaEvent; onRefetch: () =>
         label="Concluir evento"
         color="bg-primary hover:bg-primary/90"
         loading={loading}
-        onClick={() => updateStatus('CHECKED_OUT', { checkout_at: new Date().toISOString(), gps_active: false })}
+        onClick={checkOut}
       />
     );
     if (event.status === 'CHECKED_OUT') return (

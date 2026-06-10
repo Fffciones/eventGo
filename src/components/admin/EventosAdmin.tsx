@@ -2,13 +2,15 @@ import { useEffect, useState, useCallback } from 'react';
 import { Search, RefreshCw, ChevronRight, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
-interface Booking {
+interface Vaga {
   id: string;
   category: string;
-  quantity: number;
+  function_id: string | null;
   status: string;
-  total_amount: number;
-  booking_professionals: { status: string; professionals: { users: { full_name: string } } | null }[];
+  worker_status: string | null;
+  base_pay: number | null;
+  professional_id: string | null;
+  professionals: { users: { full_name: string } } | null;
 }
 
 interface Event {
@@ -17,9 +19,16 @@ interface Event {
   location_name: string;
   starts_at: string;
   ends_at: string;
+  team_arrival_at: string | null;
+  responsible_1_name: string | null;
+  responsible_1_role: string | null;
+  responsible_1_whatsapp: string | null;
+  responsible_2_name: string | null;
+  responsible_2_role: string | null;
+  responsible_2_whatsapp: string | null;
   status: string;
   clients: { users: { full_name: string } } | null;
-  bookings: Booking[];
+  vagas: Vaga[];
 }
 
 const EVENT_STATUS_COLOR: Record<string, string> = {
@@ -42,9 +51,12 @@ export default function EventosAdmin() {
       .from('events')
       .select(`
         id, name, location_name, starts_at, ends_at, status,
+        team_arrival_at,
+        responsible_1_name, responsible_1_role, responsible_1_whatsapp,
+        responsible_2_name, responsible_2_role, responsible_2_whatsapp,
         clients(users(full_name)),
-        bookings(id, category, quantity, status, total_amount,
-          booking_professionals(status, professionals(users(full_name)))
+        vagas(id, category, function_id, status, worker_status, base_pay, professional_id,
+          professionals(users(full_name))
         )
       `)
       .order('starts_at', { ascending: false })
@@ -125,7 +137,7 @@ export default function EventosAdmin() {
                       {e.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{e.bookings?.length ?? 0} tipos</td>
+                  <td className="px-4 py-3 text-slate-600">{e.vagas?.length ?? 0} vaga{(e.vagas?.length ?? 0) !== 1 ? 's' : ''}</td>
                   <td className="px-4 py-3 text-slate-300">
                     <ChevronRight className="w-4 h-4" />
                   </td>
@@ -167,6 +179,12 @@ export default function EventosAdmin() {
                   <p className="text-slate-400 text-xs font-semibold uppercase">Fim</p>
                   <p className="text-slate-800 mt-0.5">{formatDate(selected.ends_at)}</p>
                 </div>
+                {selected.team_arrival_at && (
+                  <div>
+                    <p className="text-slate-400 text-xs font-semibold uppercase">Chegada da equipe</p>
+                    <p className="text-slate-800 mt-0.5">{formatDate(selected.team_arrival_at)}</p>
+                  </div>
+                )}
                 <div className="col-span-2">
                   <p className="text-slate-400 text-xs font-semibold uppercase">Status</p>
                   <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${EVENT_STATUS_COLOR[selected.status] ?? ''}`}>
@@ -175,35 +193,49 @@ export default function EventosAdmin() {
                 </div>
               </div>
 
+              {(selected.responsible_1_name || selected.responsible_2_name) && (
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-2">Responsáveis no local</h3>
+                  <div className="space-y-2">
+                    {[
+                      { name: selected.responsible_1_name, role: selected.responsible_1_role, whats: selected.responsible_1_whatsapp },
+                      { name: selected.responsible_2_name, role: selected.responsible_2_role, whats: selected.responsible_2_whatsapp },
+                    ].filter(r => r.name).map((r, i) => (
+                      <div key={i} className="border border-slate-100 rounded-xl px-3 py-2 text-sm">
+                        <p className="font-semibold text-slate-800">{r.name}{r.role && <span className="font-normal text-slate-500"> — {r.role}</span>}</p>
+                        {r.whats && <p className="text-xs text-slate-500 mt-0.5">📱 {r.whats}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <h3 className="font-semibold text-slate-800 mb-3">Vagas</h3>
                 <div className="space-y-3">
-                  {selected.bookings?.map(b => {
-                    const confirmed = b.booking_professionals?.filter(bp =>
-                      ['ACCEPTED','IN_TRANSIT','CHECKED_IN','CHECKED_OUT'].includes(bp.status)
-                    ).length ?? 0;
+                  {groupVagas(selected.vagas ?? []).map(g => {
+                    const confirmed = g.vagas.filter(v =>
+                      v.worker_status && ['ACCEPTED','IN_TRANSIT','CHECKED_IN','CHECKED_OUT'].includes(v.worker_status)
+                    ).length;
+                    const assigned = g.vagas.filter(v => v.professional_id);
                     return (
-                      <div key={b.id} className="border border-slate-100 rounded-xl p-3">
+                      <div key={g.key} className="border border-slate-100 rounded-xl p-3">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-semibold text-slate-800">{b.category}</span>
-                          <span className="text-xs text-slate-500">{confirmed}/{b.quantity} confirmados</span>
+                          <span className="font-semibold text-slate-800">{g.category}</span>
+                          <span className="text-xs text-slate-500">{confirmed}/{g.vagas.length} confirmados</span>
                         </div>
-                        <div className="text-xs text-slate-500 flex justify-between">
-                          <span>Status: <strong>{b.status}</strong></span>
-                          <span>Total: R$ {b.total_amount?.toFixed(2)}</span>
-                        </div>
-                        {b.booking_professionals?.length > 0 && (
+                        {assigned.length > 0 && (
                           <div className="mt-2 space-y-1">
-                            {b.booking_professionals.map((bp, i) => (
-                              <div key={i} className="flex items-center justify-between text-xs">
-                                <span className="text-slate-700">{bp.professionals?.users?.full_name ?? '—'}</span>
+                            {assigned.map(v => (
+                              <div key={v.id} className="flex items-center justify-between text-xs">
+                                <span className="text-slate-700">{v.professionals?.users?.full_name ?? '—'}</span>
                                 <span className={`px-2 py-0.5 rounded-full font-semibold ${
-                                  bp.status === 'CHECKED_OUT' ? 'bg-green-100 text-green-700' :
-                                  bp.status === 'ACCEPTED' ? 'bg-blue-100 text-blue-700' :
-                                  bp.status === 'DECLINED' ? 'bg-red-100 text-red-600' :
+                                  v.worker_status === 'CHECKED_OUT' ? 'bg-green-100 text-green-700' :
+                                  v.worker_status === 'ACCEPTED' ? 'bg-blue-100 text-blue-700' :
+                                  v.worker_status === 'DECLINED' ? 'bg-red-100 text-red-600' :
                                   'bg-slate-100 text-slate-600'
                                 }`}>
-                                  {bp.status}
+                                  {v.worker_status}
                                 </span>
                               </div>
                             ))}
@@ -220,4 +252,16 @@ export default function EventosAdmin() {
       )}
     </div>
   );
+}
+
+// Agrupa vagas por função/categoria para exibição
+function groupVagas(vagas: Vaga[]): { key: string; category: string; vagas: Vaga[] }[] {
+  const map = new Map<string, { key: string; category: string; vagas: Vaga[] }>();
+  for (const v of vagas) {
+    const key = v.function_id ?? v.category ?? 'outros';
+    const g = map.get(key);
+    if (g) g.vagas.push(v);
+    else map.set(key, { key, category: v.category ?? '—', vagas: [v] });
+  }
+  return [...map.values()];
 }

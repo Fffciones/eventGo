@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import type { ProfessionalCategory } from './useProfessionalProfile';
 
 export interface OpenBooking {
-  booking_id:    string;
+  group_key:     string;     // event_id + ':' + function_id
+  vaga_id:       string;     // uma vaga aberta do grupo (a próxima a ser aceita)
   event_id:      string;
   event_name:    string;
   location_name: string;
@@ -12,18 +12,16 @@ export interface OpenBooking {
   starts_at:     string;
   ends_at:       string;
   category:      string;
-  amount:        number;
-  slots_total:   number;
-  slots_filled:  number;
-  slots_open:    number;
+  amount:        number;     // preço por vaga
+  slots_total:   number;     // total de vagas do grupo (abertas — sem rastreio das já preenchidas)
+  slots_open:    number;     // vagas ainda em aberto
   distance_km:   number | null;
-  // já tem convite pendente para este profissional?
-  already_invited: boolean;
+  already_invited: boolean;  // mantido por compat de UI (sempre false no mural aberto)
 }
 
 export function useOpenBookings(
   professionalId: string | undefined,
-  category: ProfessionalCategory | undefined,
+  functionIds: string[],
   homeLat: number | null,
   homeLng: number | null,
   radiusKm: number,
@@ -32,115 +30,104 @@ export function useOpenBookings(
   const [loading, setLoading]   = useState(true);
 
   const fetch = async () => {
-    if (!professionalId || !category) { setLoading(false); return; }
+    if (!professionalId || functionIds.length === 0) { setBookings([]); setLoading(false); return; }
 
     setLoading(true);
 
-    // Busca bookings da categoria do profissional com vagas abertas
+    // Vagas em aberto (oferta aberta) para as funções do profissional
     const { data, error } = await supabase
-      .from('bookings')
+      .from('vagas')
       .select(`
-        id,
-        category,
-        quantity,
-        total_amount,
-        events (
-          id, name, location_name, starts_at, ends_at, location,
-          status
-        ),
-        booking_professionals (
-          id, status, professional_id
-        )
+        id, function_id, category, price, status, professional_id,
+        events ( id, name, location_name, starts_at, ends_at, location, status )
       `)
-      .eq('category', category)
-      .eq('events.status', 'PUBLISHED');
+      .eq('status', 'OPEN')
+      .is('professional_id', null)
+      .in('function_id', functionIds);
 
-    if (error || !data) { setLoading(false); return; }
+    if (error || !data) { setBookings([]); setLoading(false); return; }
 
     const now = new Date();
 
-    const result: OpenBooking[] = [];
+    // Agrupar por evento + função
+    const groups = new Map<string, OpenBooking>();
 
-    for (const b of data) {
-      const ev = (b as any).events;
+    for (const v of data as any[]) {
+      const ev = v.events;
       if (!ev) continue;
+      if (new Date(ev.starts_at) <= now) continue; // só eventos futuros
 
-      // Só eventos futuros
-      if (new Date(ev.starts_at) <= now) continue;
-
-      const bps: any[] = (b as any).booking_professionals ?? [];
-      const slotsFilled = bps.filter((bp: any) =>
-        ['ACCEPTED','IN_TRANSIT','CHECKED_IN','CHECKED_OUT'].includes(bp.status)
-      ).length;
-      const slotsOpen = (b as any).quantity - slotsFilled;
-      if (slotsOpen <= 0) continue;
-
-      // Já foi convidado?
-      const alreadyInvited = bps.some((bp: any) =>
-        bp.professional_id === professionalId && bp.status === 'INVITED'
-      );
-
-      // Calcular distância (simplificado — haversine client-side)
-      let distanceKm: number | null = null;
-      const loc = ev.location; // geography vem como GeoJSON string ou null
+      // Coordenadas do evento
       let evLat: number | null = null;
       let evLng: number | null = null;
-
+      const loc = ev.location;
       if (loc && typeof loc === 'object' && loc.coordinates) {
         evLng = loc.coordinates[0];
         evLat = loc.coordinates[1];
       }
+      if (evLat == null || evLng == null) continue;
 
-      if (homeLat && homeLng && evLat && evLng) {
+      // Distância (haversine client-side)
+      let distanceKm: number | null = null;
+      if (homeLat && homeLng) {
         distanceKm = haversineKm(homeLat, homeLng, evLat, evLng);
-        if (distanceKm > radiusKm) continue; // fora do raio
+        if (distanceKm > radiusKm) continue;
       }
 
-      if (!evLat || !evLng) continue; // sem coordenadas, pular
-
-      const hourlyCache = (b as any).total_amount / Math.max(
-        1,
-        (new Date(ev.ends_at).getTime() - new Date(ev.starts_at).getTime()) / 3_600_000
-      );
-
-      result.push({
-        booking_id:      b.id,
-        event_id:        ev.id,
-        event_name:      ev.name,
-        location_name:   ev.location_name,
-        lat:             evLat,
-        lng:             evLng,
-        starts_at:       ev.starts_at,
-        ends_at:         ev.ends_at,
-        category:        (b as any).category,
-        amount:          (b as any).total_amount ?? 0,
-        slots_total:     (b as any).quantity,
-        slots_filled:    slotsFilled,
-        slots_open:      slotsOpen,
-        distance_km:     distanceKm,
-        already_invited: alreadyInvited,
-      });
+      const key = `${ev.id}:${v.function_id}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.slots_open  += 1;
+        existing.slots_total += 1;
+      } else {
+        groups.set(key, {
+          group_key:       key,
+          vaga_id:         v.id,
+          event_id:        ev.id,
+          event_name:      ev.name,
+          location_name:   ev.location_name,
+          lat:             evLat,
+          lng:             evLng,
+          starts_at:       ev.starts_at,
+          ends_at:         ev.ends_at,
+          category:        v.category ?? '',
+          amount:          Number(v.price ?? 0),
+          slots_total:     1,
+          slots_open:      1,
+          distance_km:     distanceKm,
+          already_invited: false,
+        });
+      }
     }
 
-    setBookings(result);
+    setBookings([...groups.values()]);
     setLoading(false);
   };
 
   useEffect(() => {
     fetch();
 
-    // Realtime — atualiza quando alguém aceita uma vaga
+    // Realtime — atualiza quando uma vaga muda (alguém aceitou)
     const channel = supabase
-      .channel('open-bookings')
+      .channel('open-vagas')
       .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'booking_professionals',
+        event: '*', schema: 'public', table: 'vagas',
       }, fetch)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [professionalId, category, homeLat, homeLng, radiusKm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [professionalId, functionIds.join(','), homeLat, homeLng, radiusKm]);
 
-  return { bookings, loading, refetch: fetch };
+  // Aceitar a vaga (oferta aberta) — primeiro a clicar fica com ela
+  const acceptVaga = async (vagaId: string): Promise<boolean> => {
+    const { data, error } = await supabase.rpc('accept_vaga', { p_vaga_id: vagaId });
+    if (error) throw error;
+    await fetch();
+    return data === true;
+  };
+
+  return { bookings, loading, refetch: fetch, acceptVaga };
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {

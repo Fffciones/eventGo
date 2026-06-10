@@ -20,7 +20,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 interface Props {
   invites: PendingInvite[];
-  onRespond: (bpId: string, accept: boolean) => Promise<void>;
+  onRespond: (vagaId: string, accept: boolean) => Promise<void>;
 }
 
 export default function ConviteView({ invites, onRespond }: Props) {
@@ -44,7 +44,7 @@ export default function ConviteView({ invites, onRespond }: Props) {
         {invites.length} convite{invites.length > 1 ? 's' : ''} pendente{invites.length > 1 ? 's' : ''}
       </h2>
       {invites.map(invite => (
-        <InviteCard key={invite.bp_id} invite={invite} onRespond={onRespond} />
+        <InviteCard key={invite.vaga_id} invite={invite} onRespond={onRespond} />
       ))}
     </div>
   );
@@ -66,7 +66,7 @@ function InviteCard({ invite, onRespond }: { invite: PendingInvite; onRespond: P
   const handleRespond = async (accept: boolean) => {
     setLoading(accept ? 'accept' : 'decline');
     try {
-      await onRespond(invite.bp_id, accept);
+      await onRespond(invite.vaga_id, accept);
     } finally {
       setLoading(null);
     }

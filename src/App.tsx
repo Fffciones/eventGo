@@ -61,6 +61,7 @@ export default function App() {
   const [favoritePros, setFavoritePros] = useState<Professional[]>(FAVORITE_PROFESSIONALS);
   const [selectedProId, setSelectedProId] = useState<string | null>(null);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [bookingsRefreshKey, setBookingsRefreshKey] = useState(0);
 
   // Sync to local storage — hooks ANTES de qualquer return condicional
   useEffect(() => {
@@ -132,6 +133,7 @@ export default function App() {
         onCreated={() => {
           setShowCreateEvent(false);
           setActiveTab('bookings');
+          setBookingsRefreshKey(k => k + 1);  // força refetch da lista
         }}
       />
     );
@@ -201,7 +203,7 @@ export default function App() {
       <div className="flex-1 w-full relative">
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeTab + (selectedProId || '')}
+            key={activeTab + (selectedProId || '') + (activeTab === 'bookings' ? `-${bookingsRefreshKey}` : '')}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
