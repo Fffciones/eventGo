@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, LayoutDashboard, Briefcase, Users, Layers, CalendarDays, LogOut, Menu, X, ChevronRight } from 'lucide-react';
+import { Shield, LayoutDashboard, Briefcase, Users, Layers, CalendarDays, SlidersHorizontal, LogOut, Menu, X, ChevronRight } from 'lucide-react';
 import { useAdminAuth } from './hooks/useAdminAuth';
 import AdminLogin from './components/admin/AdminLogin';
 import Dashboard from './components/admin/Dashboard';
@@ -7,8 +7,9 @@ import ProfissionaisAdmin from './components/admin/ProfissionaisAdmin';
 import ContratantesAdmin from './components/admin/ContratantesAdmin';
 import FuncoesAdmin from './components/admin/FuncoesAdmin';
 import EventosAdmin from './components/admin/EventosAdmin';
+import VariaveisAdmin from './components/admin/VariaveisAdmin';
 
-type Section = 'dashboard' | 'professionals' | 'clients' | 'functions' | 'events';
+type Section = 'dashboard' | 'professionals' | 'clients' | 'functions' | 'events' | 'system';
 
 const NAV: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard',     label: 'Dashboard',     icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -16,6 +17,7 @@ const NAV: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: 'clients',       label: 'Contratantes',  icon: <Users className="w-4 h-4" /> },
   { id: 'functions',     label: 'Funções',       icon: <Layers className="w-4 h-4" /> },
   { id: 'events',        label: 'Eventos',       icon: <CalendarDays className="w-4 h-4" /> },
+  { id: 'system',        label: 'Variáveis',     icon: <SlidersHorizontal className="w-4 h-4" /> },
 ];
 
 const ROLE_LABEL: Record<string, string> = {
@@ -154,6 +156,7 @@ export default function AdminApp() {
           {section === 'clients'       && <ContratantesAdmin />}
           {section === 'functions'     && <FuncoesAdmin />}
           {section === 'events'        && <EventosAdmin />}
+          {section === 'system'        && <VariaveisAdmin />}
         </main>
       </div>
     </div>

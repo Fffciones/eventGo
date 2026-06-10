@@ -167,7 +167,7 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
           function_id:     cat.function_id,
           category:        cat.category,        // legado (slug em uppercase)
           status:          'OPEN' as const,
-          offer_phase:     'OPEN_POOL' as const, // Etapa 3 introduz a oferta direcionada
+          offer_phase:     'DIRECTED' as const, // começa na oferta direcionada (doc 2.3.3)
           price:           fn?.price_mei ?? null,
           base_pay:        fn?.base_pay_mei ?? null,
           multiplier_type: 'NORMAL' as const,
@@ -177,6 +177,12 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
       if (vagaRows.length > 0) {
         const { error: vagasError } = await supabase.from('vagas').insert(vagaRows);
         if (vagasError) throw vagasError;
+
+        // Dispara a fase de oferta direcionada (matchmaking)
+        const { error: mmError } = await supabase.rpc('start_event_matchmaking', {
+          p_event_id: eventData.id,
+        });
+        if (mmError) console.warn('Falha ao iniciar matchmaking:', mmError.message);
       }
 
       setSuccess(true);

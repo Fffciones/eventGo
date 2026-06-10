@@ -173,7 +173,7 @@ export function useProfessionalProfile(userId?: string) {
     const { data } = await supabase
       .from('vagas')
       .select(`
-        id, category, base_pay, multiplier_type, event_id,
+        id, category, base_pay, multiplier_type, event_id, current_offer_expires_at,
         events (
           id, name, location_name, starts_at, ends_at, briefing,
           clients ( users ( full_name ) )
@@ -201,7 +201,7 @@ export function useProfessionalProfile(userId?: string) {
           client_name:   e?.clients?.users?.full_name ?? 'Cliente',
           distance_km:   null,
           is_favorite:   false,
-          expires_at:    null,
+          expires_at:    v.current_offer_expires_at ?? null,
         };
       })
     );

@@ -133,6 +133,9 @@ export interface Database {
           early_checkin: boolean;
           early_minutes: number | null;
           punctuality_score: number | null;
+          offered_pro_ids: string[];
+          current_offer_expires_at: string | null;
+          directed_until: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -140,6 +143,17 @@ export interface Database {
           'id' | 'created_at' | 'updated_at' | 'punctuality_score'>
           & { id?: string };
         Update: Partial<Database['public']['Tables']['vagas']['Insert']>;
+      };
+      system_variables: {
+        Row: {
+          key: string;
+          value: number;
+          label: string | null;
+          description: string | null;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['system_variables']['Row'], 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['system_variables']['Insert']>;
       };
       booking_professionals: {
         Row: {
@@ -270,6 +284,18 @@ export interface Database {
       respond_to_vaga_invite: {
         Args: { p_vaga_id: string; p_accept: boolean };
         Returns: void;
+      };
+      start_event_matchmaking: {
+        Args: { p_event_id: string };
+        Returns: void;
+      };
+      process_matchmaking: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
+      get_system_var: {
+        Args: { p_key: string };
+        Returns: number;
       };
     };
   };

@@ -48,11 +48,22 @@
      dropadas) para compat de pagamento/preço (Etapa 4). offer_phase default OPEN_POOL até
      a Etapa 3 introduzir a oferta direcionada.
    - ⚠️ Rodar migrations 013 e 014 no Supabase. `TRUNCATE` opcional comentado no topo da 014.
-2. **Crédito e aprovação de pagamento** (D, E): edição de `credit_limit` no admin; no fluxo
-   de criação, calcular total e checar crédito → segue; senão captura cartão (cobrança
-   diferida pós-evento).
-3. **Matchmaking 2 fases + Variáveis de Sistema** (F, G): tabela `system_variables` + aba
-   admin; função de fila com timeout por profissional → expira p/ oferta aberta.
+2. **Crédito e aprovação de pagamento** (D, E) — ✅ CONCLUÍDA (2026-06-10)
+   - Mig 015: `events.estimated_total/payment_method/charge_status`; policy admin edita
+     `clients.credit_limit`; fix RLS `vagas_admin_select`.
+   - Admin: modal de edição de limite/saldo no ContratantesAdmin.
+   - Criação de evento: calcula total, checa `credit_limit >= total` → CREDIT; senão exige
+     autorização de cartão (placeholder sem PAN; gateway na Etapa 7) → CARD.
+   - Decisões: cartão = placeholder; checagem simples (consumo acumulado fica p/ Etapa 4).
+3. **Matchmaking 2 fases + Variáveis de Sistema** (F, G) — ✅ CONCLUÍDA (2026-06-10)
+   - Mig 016: `system_variables` (timers) + colunas em vagas (offered_pro_ids,
+     current_offer_expires_at, directed_until) + motor: get_system_var, offer_vaga_to_next,
+     start_event_matchmaking, process_matchmaking; respond_to_vaga_invite avança a fila.
+   - Criação de evento dispara `start_event_matchmaking` (vagas nascem DIRECTED).
+   - App do pro: polling de `process_matchmaking` a cada 10s + countdown ao vivo no convite.
+   - Admin: aba "Variáveis" (VariaveisAdmin) edita os tempos.
+   - ⚠️ Motor roda via polling do app do pro; produção = pg_cron/edge chamando
+     process_matchmaking(). Pré-requisito p/ convites: profissionais ACTIVE + função.
 4. **Pagamento e Cobrança** (H, I, J, K): `chave_pix` em professionals; botão "Finalizar
    contratação"; componente Remuneração; PIX automático ao pro; cobrança do contratante;
    aba "Financeiro" no admin.

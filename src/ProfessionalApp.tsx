@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Bell, CalendarCheck, User, MapPin, Map } from 'lucide-react';
+import { supabase } from './lib/supabase';
 import { useAuth } from './hooks/useAuth';
 import { useProfessionalProfile } from './hooks/useProfessionalProfile';
 import { useProNotifications } from './hooks/useProNotifications';
@@ -25,6 +26,17 @@ export default function ProfessionalApp() {
   const [dismissedIds, setDismissedIds]     = useState<Set<string>>(new Set());
   const [postEventDone, setPostEventDone]   = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab]           = useState<ProTab>('map');
+
+  // Motor do matchmaking: enquanto o app do profissional está aberto, damos
+  // "ticks" periódicos que avançam a fila de ofertas direcionadas e expiram
+  // vagas para o mural. Em produção isto vira um pg_cron/edge function.
+  useEffect(() => {
+    if (!user) return;
+    const tick = () => { supabase.rpc('process_matchmaking'); };
+    tick();
+    const id = setInterval(tick, 10000);
+    return () => clearInterval(id);
+  }, [user]);
 
   const visibleBanners = notifications.filter(
     n => n.kind !== 'POST_EVENT' && !dismissedIds.has(n.event.event_id)
