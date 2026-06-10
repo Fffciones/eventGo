@@ -64,7 +64,14 @@
    - Admin: aba "Variáveis" (VariaveisAdmin) edita os tempos.
    - ⚠️ Motor roda via polling do app do pro; produção = pg_cron/edge chamando
      process_matchmaking(). Pré-requisito p/ convites: profissionais ACTIVE + função.
-4. **Pagamento e Cobrança** (H, I, J, K): `chave_pix` em professionals; botão "Finalizar
-   contratação"; componente Remuneração; PIX automático ao pro; cobrança do contratante;
-   aba "Financeiro" no admin.
+4. **Pagamento e Cobrança** (H, I, J, K) — ✅ CONCLUÍDA (2026-06-10)
+   - Mig 018: `professionals.pix_key`; `vagas.paid_at`; `reviews.vaga_id` (booking_id
+     nullable); `transactions.vaga_id`. Funções finalize_and_pay_vaga (review + pagamento
+     PIX placeholder + status CLOSING→FINISHED) e mark_event_charged. update_professional_stars
+     passa a contar por worker_status CHECKED_OUT.
+   - Pro: chave PIX no perfil. Checkout mantém IN_PROGRESS (finalização é do contratante).
+   - Contratante: "Finalizar e avaliar" por vaga (5★ + comentário) → paga o pro.
+   - Admin: aba "Financeiro" (cobranças em aberto + pagamentos a profissionais; marcar cobrado).
+   - Remuneração = valor BRUTO (doc 3.3). Movimentação real PIX/cartão = placeholder (Etapa 7).
+   - Infra: mig 017 agenda process_matchmaking via pg_cron (10s).
 5. **Canais externos** (L, M): messageria e onboarding via WhatsApp (depende de provedor).

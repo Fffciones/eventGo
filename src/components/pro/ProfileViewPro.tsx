@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import {
   User, Star, CalendarCheck, Radio, ChevronRight,
-  Camera, Loader2, Check, Edit3, X, Home, Radius, Briefcase
+  Camera, Loader2, Check, Edit3, X, Home, Radius, Briefcase, KeyRound
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAvatarUpload } from '../../hooks/useAvatarUpload';
@@ -101,6 +101,7 @@ export default function ProfileViewPro({
       <div className="px-4 pt-5 flex flex-col gap-3">
 
         <FunctionsSection profile={profile} onRefetch={onRefetch} />
+        <PixSection profile={profile} onRefetch={onRefetch} />
         <BioSection profile={profile} onRefetch={onRefetch} />
         <AddressSection profile={profile} onUpdateHomeAddress={onUpdateHomeAddress} />
         <RadiusSection profile={profile} onUpdateRadius={onUpdateRadius} />
@@ -201,6 +202,56 @@ function FunctionsSection({ profile, onRefetch }: { profile: ProfessionalProfile
               : <p className="text-sm text-slate-400">Nenhuma função selecionada.</p>
             }
           </div>
+          <button onClick={() => setEditing(true)} className="shrink-0 text-primary">
+            <Edit3 className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// ── Chave PIX ────────────────────────────────────────────────────────────────
+
+function PixSection({ profile, onRefetch }: { profile: ProfessionalProfile; onRefetch: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue]     = useState(profile.pix_key ?? '');
+  const [saving, setSaving]   = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    await supabase.from('professionals').update({ pix_key: value.trim() || null }).eq('user_id', profile.user_id);
+    setSaving(false);
+    setEditing(false);
+    onRefetch();
+  };
+
+  return (
+    <Section title="Chave PIX" icon={<KeyRound className="w-4 h-4" />}>
+      {editing ? (
+        <div className="flex flex-col gap-2">
+          <input
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            placeholder="CPF, e-mail, telefone ou chave aleatória"
+            className="w-full text-sm text-slate-700 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <p className="text-[11px] text-slate-400">Usada para receber sua remuneração após os eventos.</p>
+          <div className="flex gap-2">
+            <button onClick={() => { setEditing(false); setValue(profile.pix_key ?? ''); }} className="flex-1 py-2 rounded-lg border border-slate-200 text-slate-500 text-sm font-semibold">
+              <X className="w-3.5 h-3.5 inline mr-1" />Cancelar
+            </button>
+            <button onClick={save} disabled={saving} className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-semibold disabled:opacity-60">
+              {saving ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : <Check className="w-3.5 h-3.5 inline mr-1" />}
+              Salvar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-2">
+          <p className={`text-sm flex-1 ${profile.pix_key ? 'text-slate-700 font-medium' : 'text-amber-600'}`}>
+            {profile.pix_key || 'Cadastre sua chave PIX para receber pagamentos.'}
+          </p>
           <button onClick={() => setEditing(true)} className="shrink-0 text-primary">
             <Edit3 className="w-4 h-4" />
           </button>

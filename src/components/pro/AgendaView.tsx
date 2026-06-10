@@ -113,7 +113,8 @@ function AgendaCard({ event, onRefetch }: { event: AgendaEvent; onRefetch: () =>
   const checkOut = () =>
     runAction(() => supabase
       .from('vagas')
-      .update({ worker_status: 'CHECKED_OUT', status: 'CLOSING', checkout_at: new Date().toISOString(), gps_active: false })
+      // mantém status IN_PROGRESS; o contratante é quem "finaliza a contratação" (doc 2.3.5)
+      .update({ worker_status: 'CHECKED_OUT', status: 'IN_PROGRESS', checkout_at: new Date().toISOString(), gps_active: false })
       .eq('id', event.vaga_id));
 
   const actionButton = () => {

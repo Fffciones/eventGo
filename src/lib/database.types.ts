@@ -60,6 +60,7 @@ export interface Database {
           events_count: number;
           hourly_cache: number;
           bio: string | null;
+          pix_key: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -136,6 +137,7 @@ export interface Database {
           offered_pro_ids: string[];
           current_offer_expires_at: string | null;
           directed_until: string | null;
+          paid_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -193,7 +195,8 @@ export interface Database {
       reviews: {
         Row: {
           id: string;
-          booking_id: string;
+          booking_id: string | null;
+          vaga_id: string | null;
           reviewer_id: string;
           reviewee_id: string;
           rating: number;
@@ -208,6 +211,7 @@ export interface Database {
         Row: {
           id: string;
           booking_id: string | null;
+          vaga_id: string | null;
           from_user_id: string | null;
           to_user_id: string | null;
           type: TransactionType;
@@ -296,6 +300,14 @@ export interface Database {
       get_system_var: {
         Args: { p_key: string };
         Returns: number;
+      };
+      finalize_and_pay_vaga: {
+        Args: { p_vaga_id: string; p_rating?: number; p_comment?: string | null };
+        Returns: void;
+      };
+      mark_event_charged: {
+        Args: { p_event_id: string };
+        Returns: void;
       };
     };
   };

@@ -23,6 +23,7 @@ export interface ProfessionalProfile {
   professional_type: 'MEI' | 'DIARISTA';
   category:          ProfessionalCategory;
   functions:         ProfFunction[];
+  pix_key:           string | null;
   status:            ProfessionalStatus;
   stars:           number;
   events_count:    number;
@@ -145,6 +146,7 @@ export function useProfessionalProfile(userId?: string) {
       professional_type: p.professional_type ?? 'MEI',
       category:          p.category,
       functions:         proFunctions,
+      pix_key:           p.pix_key ?? null,
       status:            p.status,
       stars:           p.stars,
       events_count:    p.events_count,

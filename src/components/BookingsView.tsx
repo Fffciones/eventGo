@@ -4,7 +4,7 @@ import {
   MapPin, Calendar, Clock, Users, PlusCircle,
   Utensils, Headphones, Shield, Sparkles, Camera, Mic,
   Settings, UserCheck, Loader2, CheckCircle, AlertCircle,
-  Navigation, ArrowLeft, ChevronRight, RefreshCw
+  Navigation, ArrowLeft, ChevronRight, RefreshCw, Star, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { UserProfile } from '../hooks/useProfile';
@@ -97,6 +97,24 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
   const [groups, setGroups]               = useState<VagaGroup[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
+  const [ratingVaga, setRatingVaga]   = useState<VagaRow | null>(null);
+  const [ratingStars, setRatingStars] = useState(5);
+  const [ratingComment, setRatingComment] = useState('');
+  const [savingRating, setSavingRating] = useState(false);
+
+  const openRating = (v: VagaRow) => { setRatingVaga(v); setRatingStars(5); setRatingComment(''); };
+
+  const finalizeVaga = async () => {
+    if (!ratingVaga) return;
+    setSavingRating(true);
+    const { error } = await supabase.rpc('finalize_and_pay_vaga', {
+      p_vaga_id: ratingVaga.id,
+      p_rating:  ratingStars,
+      p_comment: ratingComment.trim() || null,
+    });
+    setSavingRating(false);
+    if (!error) { setRatingVaga(null); fetchBookings(); }
+  };
 
   // ── buscar lista de eventos ───────────────────────────────────────
   useEffect(() => {
@@ -402,11 +420,25 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
                                     )}
                                   </p>
                                 </div>
-                                {v.base_pay != null && v.base_pay > 0 && (
-                                  <span className="font-mono text-xs font-bold text-on-surface-variant shrink-0">
-                                    R$ {Number(v.base_pay).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
-                                  </span>
-                                )}
+                                <div className="shrink-0 flex flex-col items-end gap-1">
+                                  {v.base_pay != null && v.base_pay > 0 && (
+                                    <span className="font-mono text-xs font-bold text-on-surface-variant">
+                                      R$ {Number(v.base_pay).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+                                    </span>
+                                  )}
+                                  {v.status === 'FINISHED' ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                      <CheckCircle className="w-3 h-3" /> Paga
+                                    </span>
+                                  ) : v.worker_status === 'CHECKED_OUT' ? (
+                                    <button
+                                      onClick={() => openRating(v)}
+                                      className="text-[10px] font-bold text-on-primary bg-primary px-2.5 py-1 rounded-full active:scale-95 transition-all"
+                                    >
+                                      Finalizar e avaliar
+                                    </button>
+                                  ) : null}
+                                </div>
                               </div>
                             );
                           })}
@@ -442,6 +474,54 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
           )}
         </div>
       </div>
+
+      {/* Modal de finalização + avaliação */}
+      {ratingVaga && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => !savingRating && setRatingVaga(null)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/20">
+              <div>
+                <h2 className="font-display font-bold text-primary">Finalizar contratação</h2>
+                <p className="text-xs text-on-surface-variant">{ratingVaga.professionals?.users?.full_name ?? 'Profissional'}</p>
+              </div>
+              <button onClick={() => !savingRating && setRatingVaga(null)} className="text-on-surface-variant hover:text-on-surface">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-on-surface-variant">Avalie o profissional para concluir e liberar o pagamento.</p>
+              <div className="flex justify-center gap-2">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <button key={n} onClick={() => setRatingStars(n)} className="active:scale-90 transition-transform">
+                    <Star className={`w-9 h-9 ${n <= ratingStars ? 'fill-amber-400 text-amber-400' : 'text-outline-variant'}`} />
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={ratingComment} onChange={e => setRatingComment(e.target.value)}
+                rows={3} maxLength={300} placeholder="Comentário (opcional)"
+                className="w-full text-sm border border-outline-variant rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              {ratingVaga.base_pay != null && ratingVaga.base_pay > 0 && (
+                <p className="text-xs text-on-surface-variant text-center">
+                  Remuneração a pagar: <strong className="text-primary">R$ {Number(ratingVaga.base_pay).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2 px-5 py-4 border-t border-outline-variant/20">
+              <button onClick={() => setRatingVaga(null)} disabled={savingRating}
+                className="flex-1 py-3 rounded-xl border border-outline-variant text-on-surface font-semibold text-sm disabled:opacity-60">
+                Cancelar
+              </button>
+              <button onClick={finalizeVaga} disabled={savingRating}
+                className="flex-1 py-3 rounded-xl bg-primary text-on-primary font-semibold text-sm disabled:opacity-60 flex items-center justify-center gap-2">
+                {savingRating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Finalizar e pagar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
