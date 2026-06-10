@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Search, RefreshCw, Building2, User } from 'lucide-react';
+import { Search, RefreshCw, Building2, User, Pencil, X, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Client {
@@ -19,6 +19,40 @@ export default function ContratantesAdmin() {
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
   const [filterType, setFilter] = useState<'ALL' | 'PF' | 'PJ'>('ALL');
+  const [editing, setEditing]   = useState<Client | null>(null);
+  const [limitInput, setLimitInput]     = useState('');
+  const [balanceInput, setBalanceInput] = useState('');
+  const [saving, setSaving]     = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const openEdit = (c: Client) => {
+    setEditing(c);
+    setLimitInput(String(c.credit_limit ?? 0));
+    setBalanceInput(String(c.credit_balance ?? 0));
+    setSaveError(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    const limit = parseFloat(limitInput.replace(',', '.'));
+    const balance = parseFloat(balanceInput.replace(',', '.'));
+    if (isNaN(limit) || limit < 0 || isNaN(balance) || balance < 0) {
+      setSaveError('Informe valores válidos (≥ 0).');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    const { error } = await supabase
+      .from('clients')
+      .update({ credit_limit: limit, credit_balance: balance })
+      .eq('id', editing.id);
+    setSaving(false);
+    if (error) { setSaveError(error.message); return; }
+    setClients(prev => prev.map(c =>
+      c.id === editing.id ? { ...c, credit_limit: limit, credit_balance: balance } : c
+    ));
+    setEditing(null);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,7 +138,9 @@ export default function ContratantesAdmin() {
                 <th className="text-left px-4 py-3 text-slate-500 font-semibold">Documento</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-semibold">Telefone</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-semibold">Saldo</th>
+                <th className="text-left px-4 py-3 text-slate-500 font-semibold">Limite de crédito</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-semibold">Cadastro</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -130,8 +166,21 @@ export default function ContratantesAdmin() {
                   <td className="px-4 py-3 text-slate-900 font-semibold">
                     R$ {c.credit_balance.toFixed(2)}
                   </td>
+                  <td className="px-4 py-3 font-semibold">
+                    <span className={c.credit_limit > 0 ? 'text-emerald-700' : 'text-slate-400'}>
+                      R$ {c.credit_limit.toFixed(2)}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-slate-400 text-xs">
                     {new Date(c.created_at).toLocaleDateString('pt-BR')}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => openEdit(c)}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Editar
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -139,6 +188,62 @@ export default function ContratantesAdmin() {
           </table>
         )}
       </div>
+
+      {/* Modal de edição de crédito */}
+      {editing && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEditing(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div>
+                <h2 className="font-bold text-slate-900">Editar contratante</h2>
+                <p className="text-xs text-slate-500">{editing.users?.full_name}</p>
+              </div>
+              <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                  Limite de crédito (R$)
+                </label>
+                <input
+                  type="number" min="0" step="0.01" value={limitInput}
+                  onChange={e => setLimitInput(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-primary"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Crédito pré-aprovado para o contratante contratar sem pagar à vista (cobrança ao final do evento).
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                  Saldo (R$)
+                </label>
+                <input
+                  type="number" min="0" step="0.01" value={balanceInput}
+                  onChange={e => setBalanceInput(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-primary"
+                />
+              </div>
+              {saveError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{saveError}</p>
+              )}
+            </div>
+            <div className="flex gap-2 px-5 py-4 border-t border-slate-100">
+              <button onClick={() => setEditing(null)}
+                className="flex-1 py-2.5 rounded-lg border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50">
+                Cancelar
+              </button>
+              <button onClick={saveEdit} disabled={saving}
+                className="flex-1 py-2.5 rounded-lg bg-primary text-white font-semibold text-sm hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-2">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

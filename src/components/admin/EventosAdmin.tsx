@@ -26,6 +26,9 @@ interface Event {
   responsible_2_name: string | null;
   responsible_2_role: string | null;
   responsible_2_whatsapp: string | null;
+  estimated_total: number | null;
+  payment_method: string | null;
+  charge_status: string | null;
   status: string;
   clients: { users: { full_name: string } } | null;
   vagas: Vaga[];
@@ -54,6 +57,7 @@ export default function EventosAdmin() {
         team_arrival_at,
         responsible_1_name, responsible_1_role, responsible_1_whatsapp,
         responsible_2_name, responsible_2_role, responsible_2_whatsapp,
+        estimated_total, payment_method, charge_status,
         clients(users(full_name)),
         vagas(id, category, function_id, status, worker_status, base_pay, professional_id,
           professionals(users(full_name))
@@ -190,6 +194,21 @@ export default function EventosAdmin() {
                   <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${EVENT_STATUS_COLOR[selected.status] ?? ''}`}>
                     {selected.status}
                   </span>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs font-semibold uppercase">Valor total</p>
+                  <p className="text-slate-800 mt-0.5">
+                    {(selected.estimated_total ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs font-semibold uppercase">Pagamento</p>
+                  <p className="text-slate-800 mt-0.5">
+                    {selected.payment_method === 'CREDIT' ? 'Limite de crédito'
+                      : selected.payment_method === 'CARD' ? 'Cartão de crédito'
+                      : '—'}
+                    <span className="text-xs text-slate-400"> · {selected.charge_status ?? 'PENDING'}</span>
+                  </p>
                 </div>
               </div>
 

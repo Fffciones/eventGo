@@ -82,6 +82,9 @@ export interface Database {
           responsible_2_name: string | null;
           responsible_2_role: string | null;
           responsible_2_whatsapp: string | null;
+          estimated_total: number;
+          payment_method: 'CREDIT' | 'CARD' | null;
+          charge_status: 'PENDING' | 'AUTHORIZED' | 'CHARGED' | 'FAILED';
           status: string;
           briefing: Json | null;
           created_at: string;

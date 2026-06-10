@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, MapPin, Calendar, Clock, Users, Plus, Minus,
-  Loader2, CheckCircle, Search, X
+  Loader2, CheckCircle, Search, X, AlertCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useGeocoding } from '../hooks/useGeocoding';
@@ -29,6 +29,7 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const [success, setSuccess]     = useState(false);
+  const [cardConfirmed, setCardConfirmed] = useState(false);  // autorização de cobrança no cartão (placeholder)
 
   // Step 1 — dados do evento
   const [name, setName]           = useState('');
@@ -81,6 +82,16 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
 
   const totalProfessionals = categories.reduce((s, c) => s + c.quantity, 0);
 
+  // ── Pagamento (doc 2.3.2) ───────────────────────────────────────
+  const estimatedTotal = categories.reduce((sum, c) => {
+    const fn = functions.find(f => f.id === c.function_id);
+    return sum + (fn?.price_mei ?? 0) * c.quantity;
+  }, 0);
+  const creditLimit     = profile.credit_limit ?? 0;
+  const coveredByCredit = estimatedTotal > 0 && creditLimit >= estimatedTotal;
+  const paymentMethod: 'CREDIT' | 'CARD' = coveredByCredit ? 'CREDIT' : 'CARD';
+  const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
   const handleSubmit = async () => {
     setLoading(true);
     setError(null);
@@ -125,6 +136,9 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
           starts_at:     startsAt,
           ends_at:       endsAt,
           team_arrival_at: teamArrivalAt,
+          estimated_total: estimatedTotal,
+          payment_method:  paymentMethod,
+          charge_status:   'PENDING',
           responsible_1_name:     resp1Name.trim() || null,
           responsible_1_role:     resp1Role.trim() || null,
           responsible_1_whatsapp: resp1Whats.trim() || null,
@@ -697,6 +711,51 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
                 )}
               </div>
 
+              {/* Pagamento (doc 2.3.2) */}
+              <div className="bg-white border border-outline-variant/30 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wide">Valor total do pedido</p>
+                  <span className="font-display text-lg font-bold text-primary">{fmtBRL(estimatedTotal)}</span>
+                </div>
+
+                {coveredByCredit ? (
+                  <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-emerald-800">Coberto pelo seu limite de crédito</p>
+                      <p className="text-[11px] text-emerald-700">
+                        Limite disponível: {fmtBRL(creditLimit)}. A cobrança ocorre ao final do evento, após a confirmação do serviço.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-amber-800">
+                        {creditLimit > 0
+                          ? <>Seu limite de crédito ({fmtBRL(creditLimit)}) não cobre o total. </>
+                          : <>Você ainda não possui limite de crédito pré-aprovado. </>}
+                        O pagamento será via <strong>cartão de crédito</strong>, cobrado ao final do evento, após você confirmar o serviço.
+                      </p>
+                    </div>
+                    <label className="flex items-start gap-2 cursor-pointer px-1">
+                      <input
+                        type="checkbox" checked={cardConfirmed}
+                        onChange={e => setCardConfirmed(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-primary"
+                      />
+                      <span className="text-xs text-on-surface">
+                        Autorizo a cobrança no cartão de crédito ao final do evento.
+                        <span className="block text-[10px] text-on-surface-variant">
+                          (A captura segura do cartão será feita na etapa de pagamento.)
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
+
               {error && (
                 <p className="text-error text-xs bg-error-container px-3 py-2 rounded-lg">{error}</p>
               )}
@@ -722,7 +781,7 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
             {step === 3 ? 'Revisar' : 'Continuar'}
           </button>
         ) : (
-          <button onClick={handleSubmit} disabled={loading}
+          <button onClick={handleSubmit} disabled={loading || (!coveredByCredit && !cardConfirmed)}
             className="flex-1 bg-primary text-on-primary py-3.5 rounded-xl font-semibold text-sm disabled:opacity-60 flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Criar Evento'}
           </button>
