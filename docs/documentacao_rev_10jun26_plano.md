@@ -75,3 +75,6 @@
    - Remuneração = valor BRUTO (doc 3.3). Movimentação real PIX/cartão = placeholder (Etapa 7).
    - Infra: mig 017 agenda process_matchmaking via pg_cron (10s).
 5. **Canais externos** (L, M): messageria e onboarding via WhatsApp (depende de provedor).
+   Plano técnico detalhado (5A sem provedor + 5B com provedor) em
+   `docs/etapa5_whatsapp_plano.md`. Decisões pendentes: provedor (define grupos),
+   número da plataforma, escopo de envio.
