@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import {
   User, Star, CalendarCheck, Radio, ChevronRight,
-  Camera, Loader2, Check, Edit3, X, Home, Radius, Briefcase, KeyRound
+  Camera, Loader2, Check, Edit3, X, Home, Radius, Briefcase, KeyRound, MessageCircle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAvatarUpload } from '../../hooks/useAvatarUpload';
@@ -102,6 +102,7 @@ export default function ProfileViewPro({
 
         <FunctionsSection profile={profile} onRefetch={onRefetch} />
         <PixSection profile={profile} onRefetch={onRefetch} />
+        <WhatsAppSection profile={profile} onRefetch={onRefetch} />
         <BioSection profile={profile} onRefetch={onRefetch} />
         <AddressSection profile={profile} onUpdateHomeAddress={onUpdateHomeAddress} />
         <RadiusSection profile={profile} onUpdateRadius={onUpdateRadius} />
@@ -261,6 +262,44 @@ function PixSection({ profile, onRefetch }: { profile: ProfessionalProfile; onRe
   );
 }
 
+// ── WhatsApp opt-in ──────────────────────────────────────────────────────────
+
+function WhatsAppSection({ profile, onRefetch }: { profile: ProfessionalProfile; onRefetch: () => void }) {
+  const [saving, setSaving] = useState(false);
+
+  const toggle = async () => {
+    setSaving(true);
+    await supabase.from('users')
+      .update({ whatsapp_opt_in: !profile.whatsapp_opt_in })
+      .eq('id', profile.user_id);
+    setSaving(false);
+    onRefetch();
+  };
+
+  return (
+    <Section title="Avisos por WhatsApp" icon={<MessageCircle className="w-4 h-4" />}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-600 flex-1">
+          Receber alertas de convites e eventos pelo WhatsApp ({profile.phone ?? 'cadastre seu telefone'}).
+        </p>
+        <button
+          onClick={toggle}
+          disabled={saving}
+          role="switch"
+          aria-checked={profile.whatsapp_opt_in}
+          className={`shrink-0 w-11 h-6 rounded-full relative transition-colors disabled:opacity-60 ${
+            profile.whatsapp_opt_in ? 'bg-green-500' : 'bg-slate-300'
+          }`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+            profile.whatsapp_opt_in ? 'translate-x-5' : ''
+          }`} />
+        </button>
+      </div>
+    </Section>
+  );
+}
+
 // ── Bio ─────────────────────────────────────────────────────────────────────
 
 function BioSection({ profile, onRefetch }: { profile: ProfessionalProfile; onRefetch: () => void }) {
@@ -411,7 +450,6 @@ function InfoSection({ profile }: { profile: ProfessionalProfile }) {
           <InfoRow label="CNPJ MEI" value={profile.mei_number ?? '—'} />
         )}
         <InfoRow label="Status"    value={profile.status} />
-        <InfoRow label="WhatsApp"  value={profile.whatsapp_opt_in ? 'Ativado' : 'Desativado'} />
       </div>
     </Section>
   );

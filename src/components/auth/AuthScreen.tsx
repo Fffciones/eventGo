@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Eye, EyeOff, ArrowLeft, User, Briefcase, Loader2, CheckCircle, Mail } from 'lucide-react';
+import { MapPin, Eye, EyeOff, ArrowLeft, User, Briefcase, Loader2, CheckCircle, Mail, MessageCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
+import { waLink, PLATFORM_WHATSAPP, hasPlatformWhatsApp } from '../../lib/whatsapp';
 import ProfessionalSignupScreen from './ProfessionalSignupScreen';
 
 type AuthMode = 'landing' | 'login' | 'signup-type' | 'signup-client' | 'signup-professional' | 'forgot';
@@ -181,6 +182,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
               </div>
 
               <GoogleButton onClick={signInWithGoogle} />
+              <WhatsAppSignupButton />
             </div>
 
             <p className="text-xs text-on-surface-variant">
@@ -347,6 +349,10 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
               </button>
             </div>
 
+            <div className="w-full mt-4">
+              <WhatsAppSignupButton />
+            </div>
+
             <p className="text-center text-sm text-on-surface-variant mt-8">
               Já tem conta?{' '}
               <button onClick={() => setMode('login')} className="text-primary font-semibold">Entrar</button>
@@ -509,5 +515,22 @@ function GoogleButton({ onClick }: { onClick: () => void }) {
       </svg>
       <span className="text-sm font-semibold text-slate-700">Continuar com Google</span>
     </button>
+  );
+}
+
+// Onboarding por clique (Etapa 5A): abre o WhatsApp da plataforma com mensagem pronta.
+// Só aparece quando VITE_WHATSAPP_NUMBER está configurado.
+function WhatsAppSignupButton() {
+  if (!hasPlatformWhatsApp()) return null;
+  return (
+    <a
+      href={waLink(PLATFORM_WHATSAPP, 'Quero me cadastrar como Profissional no EventPro')}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="w-full flex items-center justify-center gap-3 py-3.5 rounded-xl border border-[#25D366] bg-[#25D366]/10 hover:bg-[#25D366]/20 active:scale-[0.98] transition-all shadow-sm"
+    >
+      <MessageCircle className="w-[18px] h-[18px] text-[#128C7E]" />
+      <span className="text-sm font-semibold text-[#128C7E]">Cadastre-se pelo WhatsApp</span>
+    </a>
   );
 }

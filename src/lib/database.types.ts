@@ -83,6 +83,7 @@ export interface Database {
           responsible_2_name: string | null;
           responsible_2_role: string | null;
           responsible_2_whatsapp: string | null;
+          whatsapp_group_link: string | null;
           estimated_total: number;
           payment_method: 'CREDIT' | 'CARD' | null;
           charge_status: 'PENDING' | 'AUTHORIZED' | 'CHARGED' | 'FAILED';
@@ -187,6 +188,7 @@ export interface Database {
           channel: NotificationChannel;
           is_read: boolean;
           payload: Json;
+          sent_at: string | null;
           created_at: string;
         };
         Insert: Omit<Database['public']['Tables']['notifications']['Row'], 'created_at'>;

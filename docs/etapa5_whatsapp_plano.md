@@ -42,7 +42,11 @@ Trocar de provedor = trocar a env `WHATSAPP_PROVIDER` + secrets. Nada mais muda.
 
 ---
 
-## FASE 5A — sem provedor (entregável já, valor imediato)
+## FASE 5A — sem provedor (entregável já, valor imediato) — ✅ IMPLEMENTADA (2026-06-11)
+
+> Migration `019_whatsapp_channel.sql`, `src/lib/whatsapp.ts`, `src/lib/whatsappTemplates.ts`,
+> `supabase/functions/whatsapp-dispatch/` (stub), deep links nas telas, opt-in e grupo-fallback.
+> Falta só setar `VITE_WHATSAPP_NUMBER` para ligar os botões de onboarding.
 
 ### Schema (migration 019)
 - `notifications.sent_at timestamptz` — controle de fila de envio.

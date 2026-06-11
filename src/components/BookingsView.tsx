@@ -4,9 +4,11 @@ import {
   MapPin, Calendar, Clock, Users, PlusCircle,
   Utensils, Headphones, Shield, Sparkles, Camera, Mic,
   Settings, UserCheck, Loader2, CheckCircle, AlertCircle,
-  Navigation, ArrowLeft, ChevronRight, RefreshCw, Star, X
+  Navigation, ArrowLeft, ChevronRight, RefreshCw, Star, X,
+  MessageCircle, Link2, Check
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { waLink } from '../lib/whatsapp';
 import type { UserProfile } from '../hooks/useProfile';
 
 interface BookingsViewProps {
@@ -22,6 +24,13 @@ interface DbEvent {
   starts_at: string;
   ends_at: string;
   status: string;
+  responsible_1_name?: string | null;
+  responsible_1_role?: string | null;
+  responsible_1_whatsapp?: string | null;
+  responsible_2_name?: string | null;
+  responsible_2_role?: string | null;
+  responsible_2_whatsapp?: string | null;
+  whatsapp_group_link?: string | null;
   booking_count?: number;
   confirmed_count?: number;
 }
@@ -40,7 +49,7 @@ interface VagaRow {
   checkin_at: string | null;
   checkout_at: string | null;
   early_minutes: number | null;
-  professionals: { users: { full_name: string; avatar_url: string | null } } | null;
+  professionals: { users: { full_name: string; avatar_url: string | null; phone: string | null } } | null;
 }
 
 // Agrupamento por função para exibição (substitui o antigo "booking")
@@ -126,7 +135,12 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
     setLoadingEvents(true);
     const { data } = await supabase
       .from('events')
-      .select('id, name, location_name, starts_at, ends_at, status')
+      .select(`
+        id, name, location_name, starts_at, ends_at, status,
+        responsible_1_name, responsible_1_role, responsible_1_whatsapp,
+        responsible_2_name, responsible_2_role, responsible_2_whatsapp,
+        whatsapp_group_link
+      `)
       .eq('client_id', profile!.client_id!)
       .order('starts_at', { ascending: false });
 
@@ -157,7 +171,7 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
       .select(`
         id, category, function_id, status, worker_status, base_pay, multiplier_type,
         professional_id, gps_active, checkin_at, checkout_at, early_minutes,
-        professionals ( users ( full_name, avatar_url ) )
+        professionals ( users ( full_name, avatar_url, phone ) )
       `)
       .eq('event_id', selectedEvent!.id)
       .order('created_at', { ascending: true });
@@ -172,6 +186,11 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
     }
     setGroups([...map.values()]);
     setLoadingBookings(false);
+  };
+
+  const patchSelectedEvent = (patch: Partial<DbEvent>) => {
+    setSelectedEvent(prev => prev ? { ...prev, ...patch } : prev);
+    setEvents(prev => prev.map(e => e.id === selectedEvent?.id ? { ...e, ...patch } : e));
   };
 
   const isConfirmed = (ws: string | null) =>
@@ -281,7 +300,7 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
       {/* Header fixo */}
       <div className="sticky top-0 bg-white border-b border-outline-variant/30 z-10 px-4 py-3 flex items-center gap-3">
         <button
-          onClick={() => { setSelectedEvent(null); setBookings([]); setExpandedBooking(null); }}
+          onClick={() => { setSelectedEvent(null); setGroups([]); setExpandedBooking(null); }}
           className="p-2 rounded-full hover:bg-surface-container transition-colors"
         >
           <ArrowLeft className="w-5 h-5 text-on-surface" />
@@ -332,6 +351,9 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
             </button>
           </div>
         </div>
+
+        {/* Contatos & WhatsApp do evento (Etapa 5A) */}
+        <EventContactsPanel event={selectedEvent} onPatch={patchSelectedEvent} />
 
         {/* Bookings */}
         <div className="space-y-3">
@@ -420,6 +442,17 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
                                     )}
                                   </p>
                                 </div>
+                                {v.professionals?.users?.phone && (
+                                  <a
+                                    href={waLink(v.professionals.users.phone, `Olá ${proName.split(' ')[0]}, sou do evento "${selectedEvent.name}" pelo EventPro.`)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Falar no WhatsApp"
+                                    className="shrink-0 w-8 h-8 rounded-full bg-[#25D366]/10 hover:bg-[#25D366]/20 flex items-center justify-center transition-colors"
+                                  >
+                                    <MessageCircle className="w-4 h-4 text-[#128C7E]" />
+                                  </a>
+                                )}
                                 <div className="shrink-0 flex flex-col items-end gap-1">
                                   {v.base_pay != null && v.base_pay > 0 && (
                                     <span className="font-mono text-xs font-bold text-on-surface-variant">
@@ -523,5 +556,112 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
         </div>
       )}
     </main>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Painel de contatos do evento — responsáveis (deep link WhatsApp) +
+// link do grupo do WhatsApp (fallback manual, Etapa 5A).
+// ════════════════════════════════════════════════════════════════════
+function EventContactsPanel({ event, onPatch }: { event: DbEvent; onPatch: (patch: Partial<DbEvent>) => void }) {
+  const responsibles = [
+    { name: event.responsible_1_name, role: event.responsible_1_role, whats: event.responsible_1_whatsapp },
+    { name: event.responsible_2_name, role: event.responsible_2_role, whats: event.responsible_2_whatsapp },
+  ].filter(r => r.name);
+
+  const [editing, setEditing] = useState(false);
+  const [link, setLink]       = useState(event.whatsapp_group_link ?? '');
+  const [saving, setSaving]   = useState(false);
+
+  const saveLink = async () => {
+    setSaving(true);
+    const value = link.trim() || null;
+    const { error } = await supabase.from('events')
+      .update({ whatsapp_group_link: value })
+      .eq('id', event.id);
+    setSaving(false);
+    if (!error) { onPatch({ whatsapp_group_link: value }); setEditing(false); }
+  };
+
+  if (responsibles.length === 0 && !event.whatsapp_group_link && !editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="w-full flex items-center justify-center gap-2 bg-white border border-dashed border-outline-variant rounded-2xl py-3 text-xs font-semibold text-on-surface-variant hover:border-primary/40 hover:text-primary transition-colors"
+      >
+        <Link2 className="w-4 h-4" /> Adicionar link do grupo de WhatsApp
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-white border border-outline-variant/30 rounded-2xl p-4 shadow-sm space-y-3">
+      <h3 className="font-display font-bold text-sm text-primary flex items-center gap-1.5">
+        <MessageCircle className="w-4 h-4 text-[#128C7E]" /> Contato & WhatsApp
+      </h3>
+
+      {responsibles.length > 0 && (
+        <div className="space-y-2">
+          {responsibles.map((r, i) => (
+            <div key={i} className="flex items-center gap-2 border border-outline-variant/20 rounded-xl px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-on-surface truncate">
+                  {r.name}{r.role && <span className="font-normal text-on-surface-variant"> — {r.role}</span>}
+                </p>
+                {r.whats && <p className="text-xs text-on-surface-variant">📱 {r.whats}</p>}
+              </div>
+              {r.whats && (
+                <a
+                  href={waLink(r.whats, `Olá ${(r.name ?? '').split(' ')[0]}, sobre o evento "${event.name}" no EventPro.`)}
+                  target="_blank" rel="noopener noreferrer" title="Falar no WhatsApp"
+                  className="shrink-0 w-8 h-8 rounded-full bg-[#25D366]/10 hover:bg-[#25D366]/20 flex items-center justify-center transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4 text-[#128C7E]" />
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Link do grupo */}
+      {editing ? (
+        <div className="space-y-2">
+          <input
+            value={link}
+            onChange={e => setLink(e.target.value)}
+            placeholder="https://chat.whatsapp.com/..."
+            className="w-full text-sm border border-outline-variant rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <p className="text-[11px] text-on-surface-variant">
+            Crie um grupo no WhatsApp, copie o link de convite e cole aqui. Os profissionais confirmados verão o botão "Entrar no grupo" na agenda.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => { setEditing(false); setLink(event.whatsapp_group_link ?? ''); }}
+              className="flex-1 py-2 rounded-lg border border-outline-variant text-on-surface-variant text-sm font-semibold">
+              Cancelar
+            </button>
+            <button onClick={saveLink} disabled={saving}
+              className="flex-1 py-2 rounded-lg bg-primary text-on-primary text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-1.5">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Salvar
+            </button>
+          </div>
+        </div>
+      ) : event.whatsapp_group_link ? (
+        <div className="flex items-center gap-2 border border-[#25D366]/30 bg-[#25D366]/5 rounded-xl px-3 py-2">
+          <Link2 className="w-4 h-4 text-[#128C7E] shrink-0" />
+          <a href={event.whatsapp_group_link} target="_blank" rel="noopener noreferrer"
+            className="flex-1 min-w-0 text-xs font-medium text-[#128C7E] truncate hover:underline">
+            {event.whatsapp_group_link}
+          </a>
+          <button onClick={() => setEditing(true)} className="shrink-0 text-xs font-semibold text-primary">Editar</button>
+        </div>
+      ) : (
+        <button onClick={() => setEditing(true)}
+          className="w-full flex items-center justify-center gap-2 border border-dashed border-outline-variant rounded-xl py-2.5 text-xs font-semibold text-on-surface-variant hover:border-primary/40 hover:text-primary transition-colors">
+          <Link2 className="w-4 h-4" /> Adicionar link do grupo de WhatsApp
+        </button>
+      )}
+    </div>
   );
 }

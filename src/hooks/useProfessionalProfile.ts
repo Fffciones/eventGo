@@ -72,6 +72,10 @@ export interface AgendaEvent {
   gps_active:    boolean;
   checkin_at:    string | null;
   checkout_at:   string | null;
+  // contatos do evento (Etapa 5A — deep link WhatsApp)
+  organizer_name:     string | null;
+  organizer_whatsapp: string | null;
+  whatsapp_group_link: string | null;
 }
 
 export function useProfessionalProfile(userId?: string) {
@@ -223,7 +227,12 @@ export function useProfessionalProfile(userId?: string) {
       .from('vagas')
       .select(`
         id, category, base_pay, worker_status, gps_active, checkin_at, checkout_at, event_id,
-        events ( id, name, location_name, starts_at, ends_at, briefing )
+        events (
+          id, name, location_name, starts_at, ends_at, briefing,
+          responsible_1_name, responsible_1_whatsapp,
+          responsible_2_name, responsible_2_whatsapp,
+          whatsapp_group_link
+        )
       `)
       .eq('professional_id', p.id)
       .in('worker_status', ['ACCEPTED','IN_TRANSIT','CHECKED_IN','CHECKED_OUT'])
@@ -246,6 +255,9 @@ export function useProfessionalProfile(userId?: string) {
           gps_active:    v.gps_active ?? false,
           checkin_at:    v.checkin_at,
           checkout_at:   v.checkout_at,
+          organizer_name:      e?.responsible_1_name ?? e?.responsible_2_name ?? null,
+          organizer_whatsapp:  e?.responsible_1_whatsapp ?? e?.responsible_2_whatsapp ?? null,
+          whatsapp_group_link: e?.whatsapp_group_link ?? null,
         };
       })
     );

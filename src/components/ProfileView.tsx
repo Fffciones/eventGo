@@ -75,6 +75,7 @@ export default function ProfileView({
   const [accPhone, setAccPhone] = useState('');
   const [accEmail, setAccEmail] = useState('');
   const [accPass, setAccPass]   = useState('');
+  const [accWhats, setAccWhats] = useState(false);
   const [accBusy, setAccBusy]   = useState<string | null>(null);
   const [accMsg, setAccMsg]     = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
@@ -83,8 +84,22 @@ export default function ProfileView({
     setAccPhone(profile?.phone ?? '');
     setAccEmail(profile?.email ?? '');
     setAccPass('');
+    setAccWhats(profile?.whatsapp_opt_in ?? false);
     setAccMsg(null);
     setSettingModal('account');
+  };
+
+  const toggleWhatsApp = async () => {
+    if (!profile?.id) return;
+    const next = !accWhats;
+    setAccWhats(next);
+    setAccBusy('whatsapp'); setAccMsg(null);
+    const { error } = await supabase.from('users')
+      .update({ whatsapp_opt_in: next })
+      .eq('id', profile.id);
+    setAccBusy(null);
+    if (error) { setAccWhats(!next); setAccMsg({ kind: 'err', text: error.message }); return; }
+    onAccountUpdated?.();
   };
 
   const saveProfileData = async () => {
@@ -525,6 +540,25 @@ export default function ProfileView({
                       className="w-full py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
                       {accBusy === 'password' && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Definir nova senha
                     </button>
+                  </div>
+
+                  {/* Avisos por WhatsApp (Etapa 5A) */}
+                  <div className="pt-1 border-t border-outline-variant/30">
+                    <div className="flex items-center justify-between gap-3 mt-2">
+                      <div>
+                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">Avisos por WhatsApp</p>
+                        <p className="text-[11px] text-on-surface-variant mt-0.5">Apenas emergências da sua equipe (no-show, substituto, cancelamento).</p>
+                      </div>
+                      <button
+                        onClick={toggleWhatsApp}
+                        disabled={accBusy === 'whatsapp'}
+                        role="switch"
+                        aria-checked={accWhats}
+                        className={`shrink-0 w-11 h-6 rounded-full relative transition-colors disabled:opacity-60 ${accWhats ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${accWhats ? 'translate-x-5' : ''}`} />
+                      </button>
+                    </div>
                   </div>
                 </>
               )}

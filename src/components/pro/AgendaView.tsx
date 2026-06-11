@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   CalendarCheck, MapPin, Clock, ChevronDown, ChevronUp,
   Shirt, Utensils, Navigation, Bus, AlertCircle,
-  Truck, LogIn, LogOut, CheckCircle, Loader2
+  Truck, LogIn, LogOut, CheckCircle, Loader2, MessageCircle, Users
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { waLink } from '../../lib/whatsapp';
 import type { AgendaEvent } from '../../hooks/useProfessionalProfile';
 
 type Filter = 'proximos' | 'passados' | 'todos';
@@ -196,6 +197,30 @@ function AgendaCard({ event, onRefetch }: { event: AgendaEvent; onRefetch: () =>
       <div className="px-4 pb-3">
         {actionButton()}
       </div>
+
+      {/* Contato do evento (Etapa 5A) */}
+      {(event.organizer_whatsapp || event.whatsapp_group_link) && (
+        <div className="px-4 pb-3 flex gap-2">
+          {event.organizer_whatsapp && (
+            <a
+              href={waLink(event.organizer_whatsapp, `Olá! Sou da equipe do evento "${event.event_name}" pelo EventPro.`)}
+              target="_blank" rel="noopener noreferrer"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-[#25D366]/40 bg-[#25D366]/10 text-[#128C7E] text-xs font-bold active:scale-95 transition-all"
+            >
+              <MessageCircle className="w-4 h-4" /> Falar com o organizador
+            </a>
+          )}
+          {event.whatsapp_group_link && (
+            <a
+              href={event.whatsapp_group_link}
+              target="_blank" rel="noopener noreferrer"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-[#25D366]/40 bg-[#25D366]/10 text-[#128C7E] text-xs font-bold active:scale-95 transition-all"
+            >
+              <Users className="w-4 h-4" /> Entrar no grupo
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Briefing expansível */}
       {hasBriefing && (
