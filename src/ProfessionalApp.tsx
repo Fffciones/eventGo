@@ -11,11 +11,12 @@ import ProfileViewPro from './components/pro/ProfileViewPro';
 import HomeViewPro from './components/pro/HomeViewPro';
 import { ProNotificationBanners, PostEventModal } from './components/pro/ProNotifications';
 import AuthScreen from './components/auth/AuthScreen';
+import ResetPasswordScreen from './components/auth/ResetPasswordScreen';
 
 type ProTab = 'map' | 'invites' | 'agenda' | 'profile';
 
 export default function ProfessionalApp() {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading, signOut, recovery, updatePassword, exitRecovery } = useAuth();
   const {
     profile, invites, agenda, loading,
     toggleAvailability, respondToInvite, refetch,
@@ -54,6 +55,10 @@ export default function ProfessionalApp() {
         </div>
       </div>
     );
+  }
+
+  if (recovery) {
+    return <ResetPasswordScreen onSubmit={updatePassword} onDone={exitRecovery} />;
   }
 
   if (!user) {

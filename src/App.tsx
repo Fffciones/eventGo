@@ -15,6 +15,7 @@ import { useNotifications } from './hooks/useNotifications';
 import { useProfile } from './hooks/useProfile';
 import { useEvents } from './hooks/useEvents';
 import AuthScreen from './components/auth/AuthScreen';
+import ResetPasswordScreen from './components/auth/ResetPasswordScreen';
 import CreateEventScreen from './components/CreateEventScreen';
 import { 
   Home, 
@@ -38,9 +39,9 @@ import FavoritesView from './components/FavoritesView';
 import ProfileView from './components/ProfileView';
 
 export default function App() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, recovery, updatePassword, exitRecovery } = useAuth();
   const { unreadCount } = useNotifications(user?.id);
-  const { profile, events: dbEvents, favorites: dbFavorites, avgRating } = useProfile(user?.id);
+  const { profile, events: dbEvents, favorites: dbFavorites, avgRating, refetch: refetchProfile } = useProfile(user?.id);
 
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const saved = localStorage.getItem('eventgo_active_tab');
@@ -86,6 +87,11 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  // Fluxo de recuperação de senha (link do e-mail) — tem prioridade sobre o app logado
+  if (recovery) {
+    return <ResetPasswordScreen onSubmit={updatePassword} onDone={exitRecovery} />;
   }
 
   if (!user) {
@@ -249,6 +255,7 @@ export default function App() {
                 profile={profile}
                 onSignOut={signOut}
                 onCreateEvent={() => setShowCreateEvent(true)}
+                onAccountUpdated={refetchProfile}
               />
             )}
           </motion.div>

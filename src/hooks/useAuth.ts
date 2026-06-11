@@ -6,6 +6,10 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser]       = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // Fluxo de recuperação de senha: o link do e-mail traz `type=recovery` no hash
+  const [recovery, setRecovery] = useState<boolean>(
+    () => typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
+  );
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -17,6 +21,10 @@ export function useAuth() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecovery(true);
+      }
 
       if (event === 'SIGNED_IN' && session?.user) {
         const meta       = session.user.user_metadata;
@@ -140,10 +148,28 @@ export function useAuth() {
   const signOut = () => supabase.auth.signOut();
 
   const resetPassword = async (email: string) => {
+    // Volta para o mesmo app (contratante/profissional) onde a recuperação foi pedida.
     return supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${window.location.origin}${window.location.pathname}`,
     });
   };
 
-  return { session, user, loading, signUp, signIn, signInWithGoogle, signOut, resetPassword };
+  // Define a nova senha durante o fluxo de recuperação (ou para a conta logada)
+  const updatePassword = async (password: string) => {
+    return supabase.auth.updateUser({ password });
+  };
+
+  // Encerra o modo recuperação e limpa o token do hash da URL
+  const exitRecovery = () => {
+    setRecovery(false);
+    if (typeof window !== 'undefined' && window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  };
+
+  return {
+    session, user, loading, recovery,
+    signUp, signIn, signInWithGoogle, signOut,
+    resetPassword, updatePassword, exitRecovery,
+  };
 }

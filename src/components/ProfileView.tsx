@@ -20,6 +20,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { useAvatarUpload } from '../hooks/useAvatarUpload';
+import { supabase } from '../lib/supabase';
 import { ClientEvent, Professional } from '../types';
 import type { UserProfile, ProfileEvent, ProfileFavorite } from '../hooks/useProfile';
 
@@ -49,12 +50,13 @@ interface ProfileViewProps {
   profile?: UserProfile | null;
   onSignOut?: () => void;
   onCreateEvent?: () => void;
+  onAccountUpdated?: () => void;
 }
 
 export default function ProfileView({
   events, dbEvents = [], dbFavorites = [], avgRating,
   onAddEvent, favoritePros, onToggleFavorite, onSelectPro,
-  profile, onSignOut, onCreateEvent
+  profile, onSignOut, onCreateEvent, onAccountUpdated
 }: ProfileViewProps) {
   const [newEventModal, setNewEventModal] = useState(false);
   const [eventName, setEventName] = useState('');
@@ -66,7 +68,54 @@ export default function ProfileView({
   const { upload, uploading, error: uploadError } = useAvatarUpload(profile?.id);
   
   // Settings detail simulate views
-  const [settingModal, setSettingModal] = useState<'payment' | 'verify' | 'help' | null>(null);
+  const [settingModal, setSettingModal] = useState<'payment' | 'account' | 'help' | null>(null);
+
+  // Dados da conta (editáveis)
+  const [accName, setAccName]   = useState('');
+  const [accPhone, setAccPhone] = useState('');
+  const [accEmail, setAccEmail] = useState('');
+  const [accPass, setAccPass]   = useState('');
+  const [accBusy, setAccBusy]   = useState<string | null>(null);
+  const [accMsg, setAccMsg]     = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const openAccount = () => {
+    setAccName(profile?.full_name ?? '');
+    setAccPhone(profile?.phone ?? '');
+    setAccEmail(profile?.email ?? '');
+    setAccPass('');
+    setAccMsg(null);
+    setSettingModal('account');
+  };
+
+  const saveProfileData = async () => {
+    if (!profile?.id) return;
+    setAccBusy('profile'); setAccMsg(null);
+    const { error } = await supabase.from('users')
+      .update({ full_name: accName.trim(), phone: accPhone.trim() || null })
+      .eq('id', profile.id);
+    setAccBusy(null);
+    if (error) { setAccMsg({ kind: 'err', text: error.message }); return; }
+    setAccMsg({ kind: 'ok', text: 'Nome e telefone atualizados.' });
+    onAccountUpdated?.();
+  };
+
+  const saveEmail = async () => {
+    setAccBusy('email'); setAccMsg(null);
+    const { error } = await supabase.auth.updateUser({ email: accEmail.trim() });
+    setAccBusy(null);
+    if (error) { setAccMsg({ kind: 'err', text: error.message }); return; }
+    setAccMsg({ kind: 'ok', text: 'Enviamos um link de confirmação para o novo e-mail. A troca só vale após confirmar.' });
+  };
+
+  const savePassword = async () => {
+    if (accPass.length < 6) { setAccMsg({ kind: 'err', text: 'A senha deve ter ao menos 6 caracteres.' }); return; }
+    setAccBusy('password'); setAccMsg(null);
+    const { error } = await supabase.auth.updateUser({ password: accPass });
+    setAccBusy(null);
+    if (error) { setAccMsg({ kind: 'err', text: error.message }); return; }
+    setAccPass('');
+    setAccMsg({ kind: 'ok', text: 'Senha atualizada com sucesso.' });
+  };
 
   const handleCreateEvent = (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,17 +378,17 @@ export default function ProfileView({
             <ChevronRight className="w-4 h-4 text-outline" />
           </div>
 
-          {/* Card Setting: Identity Validation */}
-          <div 
-            onClick={() => setSettingModal('verify')}
+          {/* Card Setting: Dados da conta */}
+          <div
+            onClick={openAccount}
             className="bg-white p-5 rounded-2xl border border-outline-variant/30 flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer shadow-sm text-left"
           >
             <div className="w-11 h-11 bg-primary-container/10 rounded-full flex items-center justify-center text-primary shrink-0">
               <ShieldCheck className="w-5 h-5 text-primary" />
             </div>
             <div className="flex-1">
-              <h4 className="text-xs font-bold text-slate-800 uppercase mt-0.5">Verificação de Conta</h4>
-              <p className="text-[11px] text-on-surface-variant">Identidade verificada em 2023</p>
+              <h4 className="text-xs font-bold text-slate-800 uppercase mt-0.5">Dados da conta</h4>
+              <p className="text-[11px] text-on-surface-variant">Nome, telefone, e-mail e senha</p>
             </div>
             <ChevronRight className="w-4 h-4 text-outline" />
           </div>
@@ -429,14 +478,53 @@ export default function ProfileView({
                 </>
               )}
 
-              {settingModal === 'verify' && (
+              {settingModal === 'account' && (
                 <>
                   <div className="flex items-center gap-2 text-primary">
                     <ShieldCheck className="w-5 h-5 text-secondary" />
-                    <h3 className="font-display font-extrabold text-base uppercase">Verificação Cadastral</h3>
+                    <h3 className="font-display font-extrabold text-base uppercase">Dados da conta</h3>
                   </div>
-                  <div className="p-3 bg-emerald-50 text-emerald-800 text-xs rounded-xl border border-emerald-200">
-                    Sua conta está no nível máximo de confiança: <strong>NÍVEL Ouro VIP</strong>. Verificado através de biometria facial, CPF e antecedentes criminais auditados em Dezembro de 2023.
+
+                  {accMsg && (
+                    <p className={`text-xs px-3 py-2 rounded-lg ${accMsg.kind === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-error-container text-error'}`}>
+                      {accMsg.text}
+                    </p>
+                  )}
+
+                  {/* Nome + telefone */}
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">Nome</label>
+                    <input value={accName} onChange={e => setAccName(e.target.value)}
+                      className="w-full text-sm border border-outline-variant rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">Telefone</label>
+                    <input value={accPhone} onChange={e => setAccPhone(e.target.value)} placeholder="(11) 99999-9999"
+                      className="w-full text-sm border border-outline-variant rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                    <button onClick={saveProfileData} disabled={accBusy === 'profile'}
+                      className="w-full py-2 bg-primary text-white text-xs font-bold rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
+                      {accBusy === 'profile' && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salvar nome e telefone
+                    </button>
+                  </div>
+
+                  {/* E-mail */}
+                  <div className="space-y-2 pt-1 border-t border-outline-variant/30">
+                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wide mt-2">E-mail</label>
+                    <input type="email" value={accEmail} onChange={e => setAccEmail(e.target.value)}
+                      className="w-full text-sm border border-outline-variant rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                    <button onClick={saveEmail} disabled={accBusy === 'email'}
+                      className="w-full py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
+                      {accBusy === 'email' && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Alterar e-mail
+                    </button>
+                  </div>
+
+                  {/* Senha */}
+                  <div className="space-y-2 pt-1 border-t border-outline-variant/30">
+                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wide mt-2">Nova senha</label>
+                    <input type="password" value={accPass} onChange={e => setAccPass(e.target.value)} placeholder="••••••••"
+                      className="w-full text-sm border border-outline-variant rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                    <button onClick={savePassword} disabled={accBusy === 'password'}
+                      className="w-full py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
+                      {accBusy === 'password' && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Definir nova senha
+                    </button>
                   </div>
                 </>
               )}
