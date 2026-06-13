@@ -95,16 +95,12 @@ export default function ActiveEventPro({ event, onRefetch, onViewAgenda }: Props
   return (
     <div className="flex flex-col min-h-[calc(100vh-130px)]">
 
-      {/* Hero — mapa ao fundo + overlay verde 50% */}
-      <div className="text-white px-5 pt-6 pb-8 relative overflow-hidden" style={{minHeight: 220}}>
-        {/* Mapa estático como fundo */}
-        <img
-          src={`https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(event.location_name)}&zoom=15&size=800x400&markers=color:red|${encodeURIComponent(event.location_name)}&style=feature:all|element:labels|visibility:off&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`}
-          className="absolute inset-0 w-full h-full object-cover"
-          alt=""
-        />
-        {/* Overlay verde 50% */}
-        <div className="absolute inset-0 bg-emerald-600/80" />
+      {/* Hero verde pulsante */}
+      <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white px-5 pt-6 pb-8 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-4 right-4 w-32 h-32 rounded-full border-4 border-white animate-ping" style={{animationDuration:'3s'}} />
+          <div className="absolute top-8 right-8 w-20 h-20 rounded-full border-4 border-white animate-ping" style={{animationDuration:'3s',animationDelay:'0.5s'}} />
+        </div>
 
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-4">
@@ -185,6 +181,24 @@ export default function ActiveEventPro({ event, onRefetch, onViewAgenda }: Props
             </div>
           )}
         </div>
+
+        {/* Mapa da localização */}
+        <a
+          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.location_name)}`}
+          target="_blank" rel="noopener noreferrer"
+          className="block rounded-2xl overflow-hidden border border-slate-100 shadow-sm"
+        >
+          <img
+            src={`https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(event.location_name)}&zoom=15&size=800x300&markers=color:0x10b981|${encodeURIComponent(event.location_name)}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`}
+            alt="Localização do evento"
+            className="w-full h-36 object-cover"
+          />
+          <div className="bg-white px-4 py-2 flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-primary shrink-0" />
+            <p className="text-xs font-semibold text-slate-600 truncate">{event.location_name}</p>
+            <span className="ml-auto text-xs text-primary font-bold shrink-0">Ver rota →</span>
+          </div>
+        </a>
 
         {/* Botão de ação principal */}
         {event.status === 'ACCEPTED' && (

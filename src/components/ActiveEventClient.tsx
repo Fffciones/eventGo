@@ -118,14 +118,12 @@ export default function ActiveEventClient({ event, onViewAll }: Props) {
   return (
     <div className="flex flex-col min-h-[calc(100vh-130px)]">
 
-      {/* Hero — mapa ao fundo + overlay verde 50% */}
-      <div className="text-white px-5 pt-6 pb-8 relative overflow-hidden" style={{minHeight: 200}}>
-        <img
-          src={`https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(event.location_name)}&zoom=15&size=800x400&markers=color:red|${encodeURIComponent(event.location_name)}&style=feature:all|element:labels|visibility:off&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`}
-          className="absolute inset-0 w-full h-full object-cover"
-          alt=""
-        />
-        <div className="absolute inset-0 bg-emerald-600/80" />
+      {/* Hero */}
+      <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white px-5 pt-6 pb-8 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-4 right-4 w-40 h-40 rounded-full border-4 border-white animate-ping" style={{animationDuration:'3s'}} />
+          <div className="absolute top-10 right-10 w-24 h-24 rounded-full border-4 border-white animate-ping" style={{animationDuration:'3s',animationDelay:'0.7s'}} />
+        </div>
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-4">
             <span className="flex items-center gap-1.5 text-xs font-bold bg-white/20 px-3 py-1 rounded-full">
@@ -172,6 +170,24 @@ export default function ActiveEventClient({ event, onViewAll }: Props) {
 
       {/* Lista da equipe */}
       <div className="flex-1 px-5 py-4 flex flex-col gap-4">
+        {/* Mapa da localização */}
+        <a
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location_name)}`}
+          target="_blank" rel="noopener noreferrer"
+          className="block rounded-2xl overflow-hidden border border-slate-100 shadow-sm"
+        >
+          <img
+            src={`https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(event.location_name)}&zoom=15&size=800x300&markers=color:0x10b981|${encodeURIComponent(event.location_name)}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`}
+            alt="Localização do evento"
+            className="w-full h-36 object-cover"
+          />
+          <div className="bg-white px-4 py-2 flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-primary shrink-0" />
+            <p className="text-xs font-semibold text-slate-600 truncate">{event.location_name}</p>
+            <span className="ml-auto text-xs text-primary font-bold shrink-0">Ver no mapa →</span>
+          </div>
+        </a>
+
         {sortedTeam.length > 0 && (
           <div className="flex flex-col gap-2">
             {sortedTeam.map(vaga => {
