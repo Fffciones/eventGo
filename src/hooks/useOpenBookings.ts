@@ -56,11 +56,18 @@ export function useOpenBookings(
         if (distanceKm > radiusKm) continue;
       }
 
-      const key = `${v.event_id}:${v.function_id}`;
+      // Agrupa por evento (não por evento+função) para evitar pins sobrepostos
+      const key = v.event_id;
       const existing = groups.get(key);
       if (existing) {
         existing.slots_open  += 1;
         existing.slots_total += 1;
+        // Usa o maior valor de remuneração para mostrar no pin
+        if (Number(v.price ?? 0) > existing.amount) {
+          existing.amount      = Number(v.price ?? 0);
+          existing.function_id = v.function_id;
+          existing.category    = v.category ?? '';
+        }
       } else {
         groups.set(key, {
           group_key:       key,
