@@ -108,8 +108,20 @@ supabase/
 ## Canais de cadastro (a implementar)
 - Formulário web (atual)
 - Aplicativo mobile (futuro)
-- **WhatsApp** (prioritário para profissionais — a explorar)
+- **WhatsApp** (prioritário para profissionais — especificação completa em `/docs/whatsapp_componente.md`)
 - **SSO Google** (✅ implementado) / **Facebook** (a implementar))
+
+## Módulo WhatsApp — especificação
+Ver `/docs/whatsapp_componente.md` para especificação completa dos 7 casos de uso:
+1. Cadastro de profissional via WhatsApp (chatbot conversacional)
+2. Boas-vindas pós-cadastro via site/app
+3. Envio de oferta de vaga
+4. Notificações ao longo da contratação
+5. Aviso de pagamento
+6. Avaliação do contratante pós-evento
+7. Criação automática de grupo por evento
+
+> Implementação pendente de definição do provedor (Z-API, Evolution API, Twilio ou 360dialog). Deep links sem provedor já implementados na Etapa 5A.
 
 ## Estado atual (o que está feito)
 - ✅ Schema completo no Supabase

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAvatarUpload } from '../../hooks/useAvatarUpload';
-import { useGeocoding } from '../../hooks/useGeocoding';
+import GeoAddressInput from '../GeoAddressInput';
 import { useFunctions, setProfessionalFunctions } from '../../hooks/useFunctions';
 import type { ProfessionalProfile } from '../../hooks/useProfessionalProfile';
 
@@ -106,7 +106,7 @@ export default function ProfileViewPro({
         <BioSection profile={profile} onRefetch={onRefetch} />
         <AddressSection profile={profile} onUpdateHomeAddress={onUpdateHomeAddress} />
         <RadiusSection profile={profile} onUpdateRadius={onUpdateRadius} />
-        <InfoSection profile={profile} />
+        <InfoSection profile={profile} onRefetch={onRefetch} />
 
       </div>
 
@@ -355,36 +355,29 @@ function AddressSection({ profile, onUpdateHomeAddress }: {
   onUpdateHomeAddress: Props['onUpdateHomeAddress'];
 }) {
   const [editing, setEditing] = useState(false);
-  const [value, setValue]     = useState(profile.home_address ?? '');
-  const { geocode, loading, error } = useGeocoding();
-
-  const save = async () => {
-    const result = await geocode(value);
-    if (!result) return;
-    await onUpdateHomeAddress(result.formatted, result.lat, result.lng);
-    setEditing(false);
-  };
+  const [saving, setSaving]   = useState(false);
 
   return (
     <Section title="Endereço residencial" icon={<Home className="w-4 h-4" />}>
       {editing ? (
-        <div className="flex flex-col gap-2">
-          <input
-            value={value}
-            onChange={e => setValue(e.target.value)}
+        <div className="flex flex-col gap-3">
+          <GeoAddressInput
+            initialValue={profile.home_address ?? ''}
             placeholder="Ex: Vila Madalena, São Paulo, SP"
-            className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            onConfirm={async r => {
+              setSaving(true);
+              await onUpdateHomeAddress(r.formatted, r.lat, r.lng);
+              setSaving(false);
+              setEditing(false);
+            }}
           />
-          {error && <p className="text-xs text-red-500">{error}</p>}
-          <div className="flex gap-2">
-            <button onClick={() => setEditing(false)} className="flex-1 py-2 rounded-lg border border-slate-200 text-slate-500 text-sm font-semibold">
-              <X className="w-3.5 h-3.5 inline mr-1" />Cancelar
-            </button>
-            <button onClick={save} disabled={loading} className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-semibold disabled:opacity-60">
-              {loading ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : <Check className="w-3.5 h-3.5 inline mr-1" />}
-              Salvar
-            </button>
-          </div>
+          <button
+            onClick={() => setEditing(false)}
+            className="w-full py-2 rounded-lg border border-slate-200 text-slate-500 text-sm font-semibold"
+          >
+            <X className="w-3.5 h-3.5 inline mr-1" />
+            {saving ? 'Salvando…' : 'Cancelar'}
+          </button>
         </div>
       ) : (
         <div className="flex items-start justify-between gap-2">
@@ -437,21 +430,102 @@ function RadiusSection({ profile, onUpdateRadius }: {
   );
 }
 
-// ── Infos fixas ──────────────────────────────────────────────────────────────
+// ── Dados cadastrais (editável) ───────────────────────────────────────────────
 
-function InfoSection({ profile }: { profile: ProfessionalProfile }) {
+function InfoSection({ profile, onRefetch }: { profile: ProfessionalProfile; onRefetch: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName]       = useState(profile.full_name);
+  const [phone, setPhone]     = useState(profile.phone ?? '');
+  const [mei, setMei]         = useState(profile.mei_number ?? '');
+  const [email, setEmail]     = useState(profile.email);
+  const [saving, setSaving]   = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const userUpdates: Record<string, unknown> = {};
+    if (name.trim()  !== profile.full_name)      userUpdates.full_name = name.trim();
+    if (phone.trim() !== (profile.phone ?? ''))  userUpdates.phone     = phone.trim() || null;
+    if (email.trim() !== profile.email)          userUpdates.email     = email.trim();
+    if (Object.keys(userUpdates).length > 0)
+      await supabase.from('users').update(userUpdates).eq('id', profile.user_id);
+
+    if (profile.professional_type === 'MEI' && mei.trim() !== (profile.mei_number ?? ''))
+      await supabase.from('professionals').update({ mei_number: mei.trim() || null }).eq('user_id', profile.user_id);
+
+    setSaving(false);
+    setEditing(false);
+    onRefetch();
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setName(profile.full_name);
+    setEmail(profile.email);
+    setPhone(profile.phone ?? '');
+    setMei(profile.mei_number ?? '');
+  };
+
   return (
     <Section title="Dados cadastrais" icon={<ChevronRight className="w-4 h-4" />}>
-      <div className="flex flex-col gap-2">
-        <InfoRow label="E-mail"    value={profile.email} />
-        <InfoRow label="Telefone"  value={profile.phone ?? '—'} />
-        <InfoRow label="Tipo"      value={profile.professional_type === 'MEI' ? 'MEI' : 'Diarista'} />
-        {profile.professional_type === 'MEI' && (
-          <InfoRow label="CNPJ MEI" value={profile.mei_number ?? '—'} />
-        )}
-        <InfoRow label="Status"    value={profile.status} />
-      </div>
+      {editing ? (
+        <div className="flex flex-col gap-3">
+          <Field label="Nome completo">
+            <input value={name} onChange={e => setName(e.target.value)}
+              className="w-full text-sm text-slate-700 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </Field>
+          <Field label="Telefone">
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+55 11 99999-9999"
+              className="w-full text-sm text-slate-700 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </Field>
+          {profile.professional_type === 'MEI' && (
+            <Field label="CNPJ MEI">
+              <input value={mei} onChange={e => setMei(e.target.value)} placeholder="00.000.000/0001-00"
+                className="w-full text-sm text-slate-700 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </Field>
+          )}
+          <Field label="E-mail">
+            <input value={email} onChange={e => setEmail(e.target.value)} type="email"
+              className="w-full text-sm text-slate-700 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </Field>
+          <div className="flex gap-2 mt-1">
+            <button onClick={cancel} className="flex-1 py-2 rounded-lg border border-slate-200 text-slate-500 text-sm font-semibold">
+              <X className="w-3.5 h-3.5 inline mr-1" />Cancelar
+            </button>
+            <button onClick={save} disabled={saving} className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-semibold disabled:opacity-60">
+              {saving ? <Loader2 className="w-3.5 h-3.5 inline animate-spin" /> : <Check className="w-3.5 h-3.5 inline mr-1" />}
+              Salvar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-col gap-2 flex-1">
+              <InfoRow label="Nome"      value={profile.full_name} />
+              <InfoRow label="E-mail"    value={profile.email} />
+              <InfoRow label="Telefone"  value={profile.phone ?? '—'} />
+              <InfoRow label="Tipo"      value={profile.professional_type === 'MEI' ? 'MEI' : 'Diarista'} />
+              {profile.professional_type === 'MEI' && (
+                <InfoRow label="CNPJ MEI" value={profile.mei_number ?? '—'} />
+              )}
+              <InfoRow label="Status"    value={profile.status} />
+            </div>
+            <button onClick={() => setEditing(true)} className="shrink-0 text-primary mt-1">
+              <Edit3 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </Section>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-slate-400 font-medium">{label}</span>
+      {children}
+    </div>
   );
 }
 

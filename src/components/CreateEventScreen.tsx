@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ArrowLeft, MapPin, Calendar, Clock, Users, Plus, Minus,
-  Loader2, CheckCircle, Search, X, AlertCircle
+  ArrowLeft, Calendar, Clock, Users, Plus, Minus,
+  Loader2, CheckCircle, X, AlertCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useGeocoding } from '../hooks/useGeocoding';
 import { useFunctions } from '../hooks/useFunctions';
 import type { UserProfile } from '../hooks/useProfile';
 import type { GeoResult } from '../hooks/useGeocoding';
+import GeoAddressInput from './GeoAddressInput';
 
 interface FunctionRequest {
   function_id: string;
@@ -267,70 +268,12 @@ export default function CreateEventScreen({ profile, onBack, onCreated }: Create
               </Field>
 
               <Field label="Local do evento">
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-3 w-4 h-4 text-on-surface-variant" />
-                  <input
-                    type="text"
-                    value={locationName}
-                    onChange={e => { setLocationName(e.target.value); setGeoResult(null); }}
-                    onKeyDown={async e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const r = await geocode(locationName);
-                        if (r) setGeoResult(r);
-                      }
-                    }}
-                    placeholder="Ex: Rua das Flores, 100 - São Paulo"
-                    className={`${inputClass} pl-9 pr-12`}
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const r = await geocode(locationName);
-                      if (r) setGeoResult(r);
-                    }}
-                    disabled={!locationName.trim() || geoLoading}
-                    className="absolute right-2 top-2 p-1.5 bg-primary text-on-primary rounded-lg disabled:opacity-40 transition-all"
-                    title="Buscar endereço"
-                  >
-                    {geoLoading
-                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : <Search className="w-3.5 h-3.5" />
-                    }
-                  </button>
-                </div>
-
-                {/* Resultado do geocoding */}
-                {geoResult && (
-                  <div className="mt-2 flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-emerald-800">Endereço confirmado</p>
-                      <p className="text-xs text-emerald-700 truncate">{geoResult.formatted}</p>
-                      <p className="text-[10px] text-emerald-600 font-mono mt-0.5">
-                        {geoResult.lat.toFixed(5)}, {geoResult.lng.toFixed(5)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => { setGeoResult(null); }}
-                      className="text-emerald-500 hover:text-emerald-700 shrink-0"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Erro de geocoding */}
-                {geoError && !geoResult && (
-                  <p className="mt-1.5 text-xs text-error bg-error-container px-3 py-1.5 rounded-lg">
-                    {geoError}
-                  </p>
-                )}
-
-                <p className="text-[11px] text-on-surface-variant mt-1.5 flex items-center gap-1">
-                  Clique em <Search className="w-3 h-3 inline" /> ou pressione Enter para confirmar o endereço.
-                </p>
+                <GeoAddressInput
+                  initialValue={locationName}
+                  placeholder="Ex: Rua das Flores, 100 - São Paulo"
+                  onConfirm={r => { setLocationName(r.formatted); setGeoResult(r); }}
+                  inputClassName={`${inputClass} pl-9 pr-12`}
+                />
               </Field>
 
               <Field label="Data">

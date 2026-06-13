@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, CalendarCheck, User, MapPin, Map } from 'lucide-react';
+import { Briefcase, CalendarCheck, User, MapPin, Map } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { useAuth } from './hooks/useAuth';
 import { useProfessionalProfile } from './hooks/useProfessionalProfile';
 import { useProNotifications } from './hooks/useProNotifications';
-import ConviteView from './components/pro/ConviteView';
+import VagasView from './components/pro/VagasView';
+import { useOpenBookings } from './hooks/useOpenBookings';
 import AgendaView from './components/pro/AgendaView';
 import ProfileViewPro from './components/pro/ProfileViewPro';
 import HomeViewPro from './components/pro/HomeViewPro';
+import ActiveEventPro from './components/pro/ActiveEventPro';
 import { ProNotificationBanners, PostEventModal } from './components/pro/ProNotifications';
 import AuthScreen from './components/auth/AuthScreen';
 import ResetPasswordScreen from './components/auth/ResetPasswordScreen';
@@ -22,6 +24,14 @@ export default function ProfessionalApp() {
     toggleAvailability, respondToInvite, refetch,
     updateHomeAddress, updateRadius,
   } = useProfessionalProfile(user?.id);
+
+  const { bookings: openVagas, loading: loadingVagas, acceptVaga } = useOpenBookings(
+    profile?.professional_id,
+    profile?.functions.map(f => f.id) ?? [],
+    profile?.home_lat ?? null,
+    profile?.home_lng ?? null,
+    profile?.action_radius_km ?? 30,
+  );
 
   const notifications = useProNotifications(agenda);
   const [dismissedIds, setDismissedIds]     = useState<Set<string>>(new Set());
@@ -38,6 +48,15 @@ export default function ProfessionalApp() {
     const id = setInterval(tick, 10000);
     return () => clearInterval(id);
   }, [user]);
+
+  // Evento ativo: worker_status em andamento E horário do evento inclui agora
+  const now = Date.now();
+  const activeEvent = agenda.find(ev => {
+    const started = new Date(ev.starts_at).getTime() <= now + 30 * 60 * 1000; // até 30min de antecipação
+    const notEnded = new Date(ev.ends_at).getTime() >= now;
+    const active = ['ACCEPTED','IN_TRANSIT','CHECKED_IN'].includes(ev.status);
+    return started && notEnded && active;
+  }) ?? null;
 
   const visibleBanners = notifications.filter(
     n => n.kind !== 'POST_EVENT' && !dismissedIds.has(n.event.event_id)
@@ -124,37 +143,52 @@ export default function ProfessionalApp() {
           onGoToAgenda={() => setActiveTab('agenda')}
         />
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="w-full"
-          >
-            {activeTab === 'map' && profile && (
-              <HomeViewPro profile={profile} />
-            )}
-            {activeTab === 'invites' && (
-              <ConviteView invites={invites} onRespond={respondToInvite} />
-            )}
-            {activeTab === 'agenda' && (
-              <AgendaView agenda={agenda} onRefetch={refetch} />
-            )}
-            {activeTab === 'profile' && (
-              <ProfileViewPro
-                profile={profile}
-                userId={user?.id}
-                onToggleAvailability={toggleAvailability}
-                onUpdateHomeAddress={updateHomeAddress}
-                onUpdateRadius={updateRadius}
-                onRefetch={refetch}
-                onSignOut={signOut}
-              />
-            )}
-          </motion.div>
-        </AnimatePresence>
+        {/* Tela de evento em andamento — sobrepõe as abas normais */}
+        {activeEvent ? (
+          <ActiveEventPro
+            event={activeEvent}
+            onRefetch={refetch}
+            onViewAgenda={() => setActiveTab('agenda')}
+          />
+        ) : (
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="w-full"
+            >
+              {activeTab === 'map' && profile && (
+                <HomeViewPro profile={profile} />
+              )}
+              {activeTab === 'invites' && (
+                <VagasView
+                  invites={invites}
+                  openVagas={openVagas}
+                  loadingVagas={loadingVagas}
+                  onRespond={respondToInvite}
+                  onAcceptVaga={acceptVaga}
+                />
+              )}
+              {activeTab === 'agenda' && (
+                <AgendaView agenda={agenda} onRefetch={refetch} />
+              )}
+              {activeTab === 'profile' && (
+                <ProfileViewPro
+                  profile={profile}
+                  userId={user?.id}
+                  onToggleAvailability={toggleAvailability}
+                  onUpdateHomeAddress={updateHomeAddress}
+                  onUpdateRadius={updateRadius}
+                  onRefetch={refetch}
+                  onSignOut={signOut}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        )}
       </div>
 
       {/* Modal pós-evento */}
@@ -176,10 +210,10 @@ export default function ProfessionalApp() {
           onClick={() => setActiveTab('map')}
         />
         <NavButton
-          label="Convites"
-          icon={<Bell className="w-5 h-5 shrink-0" />}
+          label="Vagas"
+          icon={<Briefcase className="w-5 h-5 shrink-0" />}
           active={activeTab === 'invites'}
-          badge={invites.length}
+          badge={invites.length + openVagas.length}
           onClick={() => setActiveTab('invites')}
         />
         <NavButton

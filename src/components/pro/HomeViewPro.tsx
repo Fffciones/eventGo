@@ -142,7 +142,7 @@ export default function HomeViewPro({ profile }: Props) {
               booking={selected}
               onClose={() => setSelected(null)}
               onAccept={async () => {
-                const ok = await acceptVaga(selected.vaga_id);
+                const ok = await acceptVaga(selected.event_id, selected.function_id);
                 setSelected(null);
                 if (!ok) alert('Esta vaga acabou de ser preenchida por outro profissional.');
               }}

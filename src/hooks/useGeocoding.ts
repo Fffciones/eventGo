@@ -50,5 +50,51 @@ export function useGeocoding() {
     }
   }, []);
 
-  return { geocode, loading, error };
+  // Reverse geocode: lat/lng → endereço formatado
+  const reverseGeocode = useCallback(async (lat: number, lng: number): Promise<GeoResult | null> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?` +
+        new URLSearchParams({ lat: String(lat), lon: String(lng), format: 'json' });
+      const res  = await fetch(url, {
+        headers: { 'Accept-Language': 'pt-BR,pt', 'User-Agent': 'EventPro/1.0' },
+      });
+      const data = await res.json();
+      if (!data || data.error) { setError('Localização não encontrada.'); return null; }
+      return { lat, lng, formatted: data.display_name };
+    } catch {
+      setError('Sem conexão. Verifique sua internet.');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Obtém posição atual do dispositivo e faz reverse geocode
+  const geocodeCurrentPosition = useCallback((): Promise<GeoResult | null> => {
+    return new Promise(resolve => {
+      if (!navigator.geolocation) {
+        setError('Geolocalização não suportada neste dispositivo.');
+        resolve(null);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      navigator.geolocation.getCurrentPosition(
+        async pos => {
+          const result = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+          resolve(result);
+        },
+        () => {
+          setLoading(false);
+          setError('Permissão de localização negada.');
+          resolve(null);
+        },
+        { timeout: 10000, enableHighAccuracy: false },
+      );
+    });
+  }, [reverseGeocode]);
+
+  return { geocode, reverseGeocode, geocodeCurrentPosition, loading, error };
 }

@@ -10,6 +10,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { waLink } from '../lib/whatsapp';
 import type { UserProfile } from '../hooks/useProfile';
+import ActiveEventClient from './ActiveEventClient';
 
 interface BookingsViewProps {
   profile?: UserProfile | null;
@@ -74,10 +75,12 @@ const CATEGORY_MAP: Record<string, { label: string; icon: any; color: string }> 
 };
 
 const EVENT_STATUS: Record<string, { label: string; color: string; dot: string }> = {
-  SCHEDULED:   { label: 'Agendado',    color: 'bg-amber-50 text-amber-700 border-amber-200',     dot: 'bg-amber-400' },
-  ACTIVE:      { label: 'Ativo',       color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500 animate-pulse' },
-  COMPLETED:   { label: 'Concluído',   color: 'bg-slate-50 text-slate-600 border-slate-200',      dot: 'bg-slate-400' },
-  CANCELLED:   { label: 'Cancelado',   color: 'bg-red-50 text-red-600 border-red-200',            dot: 'bg-red-400' },
+  DRAFT:       { label: 'Rascunho',     color: 'bg-slate-100 text-slate-500 border-slate-200',      dot: 'bg-slate-400' },
+  PUBLISHED:   { label: 'Agendado',     color: 'bg-amber-50 text-amber-700 border-amber-200',       dot: 'bg-amber-400' },
+  SCHEDULED:   { label: 'Agendado',     color: 'bg-amber-50 text-amber-700 border-amber-200',       dot: 'bg-amber-400' },
+  IN_PROGRESS: { label: 'Em andamento', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500 animate-pulse' },
+  COMPLETED:   { label: 'Concluído',    color: 'bg-slate-50 text-slate-600 border-slate-200',       dot: 'bg-slate-400' },
+  CANCELLED:   { label: 'Cancelado',    color: 'bg-red-50 text-red-600 border-red-200',             dot: 'bg-red-400' },
 };
 
 const BOOKING_STATUS: Record<string, { label: string; color: string; dot: string }> = {
@@ -103,6 +106,7 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
   const [events, setEvents]               = useState<DbEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<DbEvent | null>(null);
+  const [statusFilter, setStatusFilter]   = useState<'upcoming' | 'active' | 'done'>('upcoming');
   const [groups, setGroups]               = useState<VagaGroup[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [expandedBooking, setExpandedBooking] = useState<string | null>(null);
@@ -201,9 +205,30 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
   const totalRequested = groups.reduce((sum, g) => sum + g.total, 0);
 
   // ════════════════════════════════════════════════════════════════
+  // TELA ATIVA — evento IN_PROGRESS toma a página principal
+  // ════════════════════════════════════════════════════════════════
+  const activeInProgress = !selectedEvent ? events.find(e => e.status === 'IN_PROGRESS') : null;
+  if (activeInProgress) {
+    return (
+      <ActiveEventClient
+        event={activeInProgress}
+        onViewAll={() => setSelectedEvent(activeInProgress)}
+      />
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════
   // VIEW 1 — LISTA DE EVENTOS
   // ════════════════════════════════════════════════════════════════
   if (!selectedEvent) {
+    const FILTERS = [
+      { key: 'upcoming' as const, label: 'Agendados',  statuses: ['SCHEDULED', 'PUBLISHED', 'DRAFT'] },
+      { key: 'active'   as const, label: 'Em andamento', statuses: ['IN_PROGRESS'] },
+      { key: 'done'     as const, label: 'Finalizados', statuses: ['COMPLETED', 'CANCELLED'] },
+    ];
+    const activeFilter = FILTERS.find(f => f.key === statusFilter)!;
+    const filteredEvents = events.filter(e => activeFilter.statuses.includes(e.status));
+
     return (
       <main className="px-4 md:px-6 pt-4 pb-24 max-w-3xl mx-auto space-y-5">
         <div className="flex items-center justify-between">
@@ -219,25 +244,56 @@ export default function BookingsView({ profile, onNavigate, onCreateEvent }: Boo
           </button>
         </div>
 
+        {/* Filtro de status */}
+        <div className="flex gap-2">
+          {FILTERS.map(f => {
+            const count = events.filter(e => f.statuses.includes(e.status)).length;
+            return (
+              <button
+                key={f.key}
+                onClick={() => setStatusFilter(f.key)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold border transition-all ${
+                  statusFilter === f.key
+                    ? 'bg-primary text-on-primary border-primary shadow-sm'
+                    : 'bg-white text-on-surface-variant border-outline-variant hover:border-primary/40'
+                }`}
+              >
+                {f.label}
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  statusFilter === f.key ? 'bg-white/20 text-white' : 'bg-surface-container text-on-surface-variant'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         {loadingEvents ? (
           <div className="flex justify-center py-16">
             <Loader2 className="w-6 h-6 text-primary animate-spin" />
           </div>
-        ) : events.length === 0 ? (
+        ) : filteredEvents.length === 0 ? (
           <div className="bg-white border border-outline-variant/30 rounded-2xl p-10 text-center space-y-3">
             <Calendar className="w-10 h-10 text-on-surface-variant mx-auto" />
-            <p className="font-display text-lg font-bold text-primary">Nenhum evento ainda</p>
-            <p className="text-sm text-on-surface-variant">Crie seu primeiro evento para montar sua equipe.</p>
-            <button
-              onClick={onCreateEvent}
-              className="mt-2 flex items-center gap-2 bg-primary text-on-primary font-semibold px-5 py-3 rounded-xl shadow-md mx-auto active:scale-[0.98] transition-all text-sm"
-            >
-              <PlusCircle className="w-4 h-4" /> Criar evento
-            </button>
+            <p className="font-display text-lg font-bold text-primary">
+              {events.length === 0 ? 'Nenhum evento ainda' : 'Nenhum evento nesta categoria'}
+            </p>
+            <p className="text-sm text-on-surface-variant">
+              {events.length === 0 ? 'Crie seu primeiro evento para montar sua equipe.' : 'Tente outro filtro acima.'}
+            </p>
+            {events.length === 0 && (
+              <button
+                onClick={onCreateEvent}
+                className="mt-2 flex items-center gap-2 bg-primary text-on-primary font-semibold px-5 py-3 rounded-xl shadow-md mx-auto active:scale-[0.98] transition-all text-sm"
+              >
+                <PlusCircle className="w-4 h-4" /> Criar evento
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
-            {events.map((ev, idx) => {
+            {filteredEvents.map((ev, idx) => {
               const st = EVENT_STATUS[ev.status] ?? EVENT_STATUS.SCHEDULED;
               const startDate = new Date(ev.starts_at);
               const endDate   = new Date(ev.ends_at);

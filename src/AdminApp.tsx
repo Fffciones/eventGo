@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, LayoutDashboard, Briefcase, Users, Layers, CalendarDays, SlidersHorizontal, Wallet, LogOut, Menu, X, ChevronRight } from 'lucide-react';
+import { Shield, LayoutDashboard, Briefcase, Users, Layers, CalendarDays, SlidersHorizontal, Wallet, LogOut, Menu, X, ChevronRight, ClipboardList, ShieldCheck } from 'lucide-react';
 import { useAdminAuth } from './hooks/useAdminAuth';
 import AdminLogin from './components/admin/AdminLogin';
 import Dashboard from './components/admin/Dashboard';
@@ -9,8 +9,10 @@ import FuncoesAdmin from './components/admin/FuncoesAdmin';
 import EventosAdmin from './components/admin/EventosAdmin';
 import VariaveisAdmin from './components/admin/VariaveisAdmin';
 import FinanceiroAdmin from './components/admin/FinanceiroAdmin';
+import VagasAdmin from './components/admin/VagasAdmin';
+import AdminsAdmin from './components/admin/AdminsAdmin';
 
-type Section = 'dashboard' | 'professionals' | 'clients' | 'functions' | 'events' | 'finance' | 'system';
+type Section = 'dashboard' | 'professionals' | 'clients' | 'functions' | 'events' | 'vagas' | 'finance' | 'system' | 'admins';
 
 const NAV: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard',     label: 'Dashboard',     icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -18,7 +20,9 @@ const NAV: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: 'clients',       label: 'Contratantes',  icon: <Users className="w-4 h-4" /> },
   { id: 'functions',     label: 'Funções',       icon: <Layers className="w-4 h-4" /> },
   { id: 'events',        label: 'Eventos',       icon: <CalendarDays className="w-4 h-4" /> },
+  { id: 'vagas',         label: 'Vagas',         icon: <ClipboardList className="w-4 h-4" /> },
   { id: 'finance',       label: 'Financeiro',    icon: <Wallet className="w-4 h-4" /> },
+  { id: 'admins',        label: 'Administradores', icon: <ShieldCheck className="w-4 h-4" /> },
   { id: 'system',        label: 'Variáveis',     icon: <SlidersHorizontal className="w-4 h-4" /> },
 ];
 
@@ -158,7 +162,9 @@ export default function AdminApp() {
           {section === 'clients'       && <ContratantesAdmin />}
           {section === 'functions'     && <FuncoesAdmin />}
           {section === 'events'        && <EventosAdmin />}
+          {section === 'vagas'         && <VagasAdmin />}
           {section === 'finance'       && <FinanceiroAdmin />}
+          {section === 'admins'        && <AdminsAdmin />}
           {section === 'system'        && <VariaveisAdmin />}
         </main>
       </div>

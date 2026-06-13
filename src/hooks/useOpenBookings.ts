@@ -3,8 +3,9 @@ import { supabase } from '../lib/supabase';
 
 export interface OpenBooking {
   group_key:     string;     // event_id + ':' + function_id
-  vaga_id:       string;     // uma vaga aberta do grupo (a próxima a ser aceita)
+  vaga_id:       string;     // uma vaga aberta do grupo (referência, não usada no aceite)
   event_id:      string;
+  function_id:   string;
   event_name:    string;
   location_name: string;
   lat:           number;
@@ -30,51 +31,31 @@ export function useOpenBookings(
   const [loading, setLoading]   = useState(true);
 
   const fetch = async () => {
-    if (!professionalId || functionIds.length === 0) { setBookings([]); setLoading(false); return; }
+    if (!professionalId) { setBookings([]); setLoading(false); return; }
 
     setLoading(true);
 
-    // Vagas em aberto (oferta aberta) para as funções do profissional
+    // RPC retorna lat/lng já como float (evita problema com PostGIS WKB hex)
     const { data, error } = await supabase
-      .from('vagas')
-      .select(`
-        id, function_id, category, price, status, professional_id,
-        events ( id, name, location_name, starts_at, ends_at, location, status )
-      `)
-      .eq('status', 'OPEN')
-      .is('professional_id', null)
-      .in('function_id', functionIds);
+      .rpc('get_open_vagas_for_professional', { p_professional_id: professionalId });
 
     if (error || !data) { setBookings([]); setLoading(false); return; }
-
-    const now = new Date();
 
     // Agrupar por evento + função
     const groups = new Map<string, OpenBooking>();
 
     for (const v of data as any[]) {
-      const ev = v.events;
-      if (!ev) continue;
-      if (new Date(ev.starts_at) <= now) continue; // só eventos futuros
+      const evLat: number = v.lat;
+      const evLng: number = v.lng;
 
-      // Coordenadas do evento
-      let evLat: number | null = null;
-      let evLng: number | null = null;
-      const loc = ev.location;
-      if (loc && typeof loc === 'object' && loc.coordinates) {
-        evLng = loc.coordinates[0];
-        evLat = loc.coordinates[1];
-      }
-      if (evLat == null || evLng == null) continue;
-
-      // Distância (haversine client-side)
+      // Distância (haversine client-side) — só filtra se tiver endereço cadastrado
       let distanceKm: number | null = null;
       if (homeLat && homeLng) {
         distanceKm = haversineKm(homeLat, homeLng, evLat, evLng);
         if (distanceKm > radiusKm) continue;
       }
 
-      const key = `${ev.id}:${v.function_id}`;
+      const key = `${v.event_id}:${v.function_id}`;
       const existing = groups.get(key);
       if (existing) {
         existing.slots_open  += 1;
@@ -82,14 +63,15 @@ export function useOpenBookings(
       } else {
         groups.set(key, {
           group_key:       key,
-          vaga_id:         v.id,
-          event_id:        ev.id,
-          event_name:      ev.name,
-          location_name:   ev.location_name,
+          vaga_id:         v.vaga_id,
+          event_id:        v.event_id,
+          function_id:     v.function_id,
+          event_name:      v.event_name,
+          location_name:   v.location_name,
           lat:             evLat,
           lng:             evLng,
-          starts_at:       ev.starts_at,
-          ends_at:         ev.ends_at,
+          starts_at:       v.starts_at,
+          ends_at:         v.ends_at,
           category:        v.category ?? '',
           amount:          Number(v.price ?? 0),
           slots_total:     1,
@@ -117,14 +99,18 @@ export function useOpenBookings(
 
     return () => { supabase.removeChannel(channel); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [professionalId, functionIds.join(','), homeLat, homeLng, radiusKm]);
+  }, [professionalId, homeLat, homeLng, radiusKm]);
 
-  // Aceitar a vaga (oferta aberta) — primeiro a clicar fica com ela
-  const acceptVaga = async (vagaId: string): Promise<boolean> => {
-    const { data, error } = await supabase.rpc('accept_vaga', { p_vaga_id: vagaId });
+  // Aceitar a primeira vaga disponível do grupo (event + function).
+  // Usa accept_open_vaga que faz FOR UPDATE SKIP LOCKED para evitar race condition.
+  const acceptVaga = async (eventId: string, functionId: string): Promise<boolean> => {
+    const { data, error } = await supabase.rpc('accept_open_vaga', {
+      p_event_id:    eventId,
+      p_function_id: functionId,
+    });
     if (error) throw error;
     await fetch();
-    return data === true;
+    return data !== null;
   };
 
   return { bookings, loading, refetch: fetch, acceptVaga };

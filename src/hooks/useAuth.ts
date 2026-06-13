@@ -2,6 +2,62 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Session, User } from '@supabase/supabase-js';
 
+// Garante que public.users e o perfil correspondente existem no banco.
+// Chamada após SIGNED_IN para evitar menus inativos no login OAuth.
+async function ensureProfile(
+  uid: string,
+  email: string,
+  fullName: string,
+  avatarUrl: string | null,
+  isOAuth: boolean,
+  meta: Record<string, any>,
+) {
+  const { data: existingUser } = await supabase
+    .from('users')
+    .select('id, user_type')
+    .eq('id', uid)
+    .single();
+
+  if (!existingUser) {
+    await supabase.from('users').insert({
+      id: uid, email, full_name: fullName, avatar_url: avatarUrl, user_type: 'CLIENT',
+    });
+    const doc = uid.replace(/-/g, '').slice(0, 11);
+    await supabase.from('clients').insert({
+      user_id: uid, document: doc, is_company: false, credit_balance: 0, credit_limit: 0,
+    });
+    return;
+  }
+
+  if (isOAuth && (fullName || avatarUrl)) {
+    await supabase.from('users').update({
+      ...(fullName  ? { full_name:  fullName }  : {}),
+      ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+    }).eq('id', uid);
+  }
+
+  if (existingUser.user_type === 'CLIENT') {
+    const { data } = await supabase.from('clients').select('id').eq('user_id', uid).single();
+    if (!data) {
+      const doc = uid.replace(/-/g, '').slice(0, 11);
+      await supabase.from('clients').insert({
+        user_id: uid, document: doc, is_company: false, credit_balance: 0, credit_limit: 0,
+      });
+    }
+  }
+
+  if (existingUser.user_type === 'PROFESSIONAL') {
+    const { data } = await supabase.from('professionals').select('id').eq('user_id', uid).single();
+    if (!data) {
+      await supabase.from('professionals').insert({
+        user_id: uid, mei_number: meta?.mei_number ?? '', category: meta?.category ?? 'GARCOM',
+        status: 'PENDING', stars: 0, events_count: 0, hourly_cache: 0,
+        is_available: false, action_radius_km: 10, online_score: 0,
+      });
+    }
+  }
+}
+
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser]       = useState<User | null>(null);
@@ -35,81 +91,10 @@ export function useAuth() {
         const fullName   = meta?.full_name ?? meta?.name ?? '';
         const avatarUrl  = meta?.avatar_url ?? meta?.picture ?? null;
 
-        // 1. Garante registro em public.users com dados atualizados
-        supabase.from('users')
-          .select('id, user_type')
-          .eq('id', uid)
-          .single()
-          .then(({ data: existingUser }) => {
-            if (!existingUser) {
-              // Novo usuário OAuth — cria como CLIENT por padrão
-              supabase.from('users').insert({
-                id:         uid,
-                email:      session.user.email ?? '',
-                full_name:  fullName,
-                avatar_url: avatarUrl,
-                user_type:  'CLIENT',
-              }).then(() => {
-                // Cria perfil de cliente
-                const uniqueDoc = uid.replace(/-/g, '').slice(0, 11);
-                supabase.from('clients').insert({
-                  user_id:        uid,
-                  document:       uniqueDoc,
-                  is_company:     false,
-                  credit_balance: 0,
-                  credit_limit:   0,
-                });
-              });
-            } else {
-              // Usuário existente — atualiza nome/avatar se veio do Google
-              if (isOAuth && (fullName || avatarUrl)) {
-                supabase.from('users').update({
-                  ...(fullName   ? { full_name:  fullName }  : {}),
-                  ...(avatarUrl  ? { avatar_url: avatarUrl } : {}),
-                }).eq('id', uid);
-              }
-
-              // Garante perfil de cliente se for CLIENT sem registro
-              if (existingUser.user_type === 'CLIENT') {
-                supabase.from('clients')
-                  .select('id').eq('user_id', uid).single()
-                  .then(({ data }) => {
-                    if (!data) {
-                      const uniqueDoc = uid.replace(/-/g, '').slice(0, 11);
-                      supabase.from('clients').insert({
-                        user_id:        uid,
-                        document:       uniqueDoc,
-                        is_company:     false,
-                        credit_balance: 0,
-                        credit_limit:   0,
-                      });
-                    }
-                  });
-              }
-
-              // Garante perfil de profissional se for PROFESSIONAL sem registro
-              if (existingUser.user_type === 'PROFESSIONAL') {
-                supabase.from('professionals')
-                  .select('id').eq('user_id', uid).single()
-                  .then(({ data }) => {
-                    if (!data) {
-                      supabase.from('professionals').insert({
-                        user_id:      uid,
-                        mei_number:   meta?.mei_number ?? '',
-                        category:     meta?.category ?? 'GARCOM',
-                        status:       'PENDING',
-                        stars:        0,
-                        events_count: 0,
-                        hourly_cache: 0,
-                        is_available: false,
-                        action_radius_km: 10,
-                        online_score: 0,
-                      });
-                    }
-                  });
-              }
-            }
-          });
+        // Mantém loading até o perfil estar pronto no banco (evita menus inativos)
+        setLoading(true);
+        ensureProfile(uid, session.user.email ?? '', fullName, avatarUrl, isOAuth, meta)
+          .finally(() => setLoading(false));
       }
     });
 

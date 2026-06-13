@@ -64,24 +64,21 @@ export function useProfile(userId?: string) {
 
     if (!userData) return;
 
-    if (userData.user_type === 'CLIENT') {
-      const { data: clientData } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('user_id', userId!)
-        .single();
+    // Sempre tenta carregar perfil de cliente — um profissional pode também criar eventos
+    const { data: clientData } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('user_id', userId!)
+      .single();
 
-      setProfile({
-        ...userData,
-        credit_balance: clientData?.credit_balance ?? 0,
-        credit_limit:   clientData?.credit_limit ?? 0,
-        document:       clientData?.document,
-        is_company:     clientData?.is_company,
-        client_id:      clientData?.id,
-      });
-    } else {
-      setProfile(userData);
-    }
+    setProfile({
+      ...userData,
+      credit_balance: clientData?.credit_balance ?? 0,
+      credit_limit:   clientData?.credit_limit ?? 0,
+      document:       clientData?.document,
+      is_company:     clientData?.is_company,
+      client_id:      clientData?.id,
+    });
   };
 
   const fetchEvents = async () => {
