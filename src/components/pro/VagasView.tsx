@@ -281,13 +281,42 @@ function VagaCard({ vaga, onAccept }: { vaga: OpenBooking; onAccept: Props['onAc
   if (accepted) {
     return (
       <motion.div
-        initial={{ opacity: 1 }}
-        animate={{ opacity: 0, height: 0 }}
-        transition={{ delay: 1, duration: 0.4 }}
-        className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-4 flex items-center gap-3"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-2xl border-2 border-emerald-400 overflow-hidden shadow-lg"
       >
-        <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
-        <p className="text-sm font-semibold text-emerald-700">Vaga aceita! Confira sua agenda.</p>
+        {/* Faixa de sucesso */}
+        <div className="bg-emerald-500 px-4 py-3 flex items-center gap-2">
+          <CheckCircle className="w-5 h-5 text-white shrink-0" />
+          <div>
+            <p className="text-white font-black text-sm">Vaga confirmada! Você está na equipe.</p>
+            <p className="text-emerald-100 text-xs">Confira os detalhes abaixo e prepare-se.</p>
+          </div>
+        </div>
+
+        {/* Detalhes do evento */}
+        <div className="px-4 pt-3 pb-3">
+          <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-0.5">
+            {CATEGORY_LABEL[vaga.category] ?? vaga.category}
+          </p>
+          <h3 className="text-base font-bold text-slate-800 mb-3">{vaga.event_name}</h3>
+
+          <div className="flex flex-col gap-1.5">
+            <InfoRow icon={<Calendar className="w-3.5 h-3.5" />}
+              text={`${startsAt.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})}`} />
+            <InfoRow icon={<Clock className="w-3.5 h-3.5" />} text={timeLabel} />
+            <InfoRow icon={<MapPin className="w-3.5 h-3.5" />} text={vaga.location_name}
+              sub={vaga.distance_km != null ? `${vaga.distance_km.toFixed(1)} km de você` : undefined} />
+          </div>
+        </div>
+
+        {/* Remuneração */}
+        <div className="mx-4 mb-4 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-emerald-700">Sua remuneração</p>
+          <p className="text-xl font-black text-emerald-700">
+            R$ {vaga.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
+        </div>
       </motion.div>
     );
   }

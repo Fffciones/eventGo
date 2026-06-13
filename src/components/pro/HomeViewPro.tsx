@@ -144,7 +144,6 @@ export default function HomeViewPro({ profile }: Props) {
               onAccept={async () => {
                 try {
                   const ok = await acceptVaga(selected.event_id);
-                  setSelected(null);
                   if (!ok) alert('Esta vaga acabou de ser preenchida por outro profissional.');
                 } catch (e: any) {
                   alert(e?.message ?? 'Erro ao aceitar vaga.');
@@ -197,13 +196,58 @@ function EventPin({ booking: b, selected, onClick }: {
 
 function EventCard({ booking: b, onClose, onAccept }: { booking: OpenBooking; onClose: () => void; onAccept: () => Promise<void>; }) {
   const [accepting, setAccepting] = useState(false);
+  const [accepted, setAccepted]   = useState(false);
   const startsAt  = new Date(b.starts_at);
   const endsAt    = new Date(b.ends_at);
   const durationH = Math.round((endsAt.getTime() - startsAt.getTime()) / 3_600_000);
-  const perSlot   = b.amount;  // preço já é por vaga
+  const perSlot   = b.amount;
 
-  const dateLabel = startsAt.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
+  const dateLabel = startsAt.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
   const timeLabel = `${startsAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} – ${endsAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
+  if (accepted) {
+    return (
+      <div className="bg-white rounded-2xl shadow-xl border-2 border-emerald-400 overflow-hidden">
+        <div className="bg-emerald-500 px-4 py-3 flex items-center gap-2">
+          <CheckCircle className="w-5 h-5 text-white shrink-0" />
+          <div>
+            <p className="text-white font-black text-sm">Vaga confirmada! Você está na equipe.</p>
+            <p className="text-emerald-100 text-xs">Prepare-se para o evento.</p>
+          </div>
+          <button onClick={onClose} className="ml-auto text-white/70 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-4 pt-3 pb-3">
+          <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-0.5">
+            {CATEGORY_EMOJI[b.category]} {CATEGORY_LABEL[b.category] ?? b.category}
+          </p>
+          <h3 className="text-base font-bold text-slate-800 mb-3">{b.event_name}</h3>
+          <div className="flex flex-col gap-1.5">
+            <InfoRow icon={<Clock className="w-3.5 h-3.5" />} text={`${dateLabel} · ${timeLabel} (${durationH}h)`} />
+            <InfoRow icon={<MapPin className="w-3.5 h-3.5" />} text={b.location_name}
+              sub={b.distance_km != null ? `${b.distance_km.toFixed(1)} km de você` : undefined} />
+          </div>
+        </div>
+        <div className="mx-4 mb-4 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-emerald-700">Sua remuneração</p>
+          <p className="text-xl font-black text-emerald-700">
+            R$ {perSlot.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
+        </div>
+        <div className="px-4 pb-4">
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${b.lat},${b.lng}`}
+            target="_blank" rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-all"
+          >
+            <Navigation className="w-4 h-4 text-primary" />
+            Ver rota no Google Maps
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
@@ -240,7 +284,12 @@ function EventCard({ booking: b, onClose, onAccept }: { booking: OpenBooking; on
       <div className="px-4 pb-4 flex flex-col gap-2">
         <button
           disabled={accepting}
-          onClick={async () => { setAccepting(true); try { await onAccept(); } finally { setAccepting(false); } }}
+          onClick={async () => {
+            setAccepting(true);
+            try { await onAccept(); setAccepted(true); }
+            catch { /* onAccept já trata o erro */ }
+            finally { setAccepting(false); }
+          }}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-60 shadow-sm"
         >
           {accepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
