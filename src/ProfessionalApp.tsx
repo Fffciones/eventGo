@@ -54,13 +54,15 @@ export default function ProfessionalApp() {
     return () => clearInterval(id);
   }, [user]);
 
-  // Evento ativo: worker_status em andamento E horário do evento inclui agora
+  // Evento ativo: profissional já fez check-in OU o evento começou e ele está a caminho/confirmado
   const now = Date.now();
   const activeEvent = agenda.find(ev => {
-    const started = new Date(ev.starts_at).getTime() <= now + 30 * 60 * 1000; // até 30min de antecipação
-    const notEnded = new Date(ev.ends_at).getTime() >= now;
-    const active = ['ACCEPTED','IN_TRANSIT','CHECKED_IN'].includes(ev.status);
-    return started && notEnded && active;
+    if (!['ACCEPTED','IN_TRANSIT','CHECKED_IN'].includes(ev.status)) return false;
+    const startsAt = new Date(ev.starts_at).getTime();
+    const endsAt   = new Date(ev.ends_at).getTime();
+    if (endsAt < now) return false;                           // evento já encerrou
+    if (ev.status === 'CHECKED_IN') return true;              // no local: sempre mostra
+    return startsAt <= now + 60 * 60 * 1000;                  // começa em até 1h ou já começou
   }) ?? null;
 
   const visibleBanners = notifications.filter(
