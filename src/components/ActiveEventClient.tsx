@@ -118,12 +118,14 @@ export default function ActiveEventClient({ event, onViewAll }: Props) {
   return (
     <div className="flex flex-col min-h-[calc(100vh-130px)]">
 
-      {/* Hero */}
-      <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white px-5 pt-6 pb-8 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-4 right-4 w-40 h-40 rounded-full border-4 border-white animate-ping" style={{animationDuration:'3s'}} />
-          <div className="absolute top-10 right-10 w-24 h-24 rounded-full border-4 border-white animate-ping" style={{animationDuration:'3s',animationDelay:'0.7s'}} />
-        </div>
+      {/* Hero — mapa ao fundo + overlay verde 50% */}
+      <div className="text-white px-5 pt-6 pb-8 relative overflow-hidden" style={{minHeight: 200}}>
+        <img
+          src={`https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(event.location_name)}&zoom=15&size=800x400&markers=color:red|${encodeURIComponent(event.location_name)}&style=feature:all|element:labels|visibility:off&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`}
+          className="absolute inset-0 w-full h-full object-cover"
+          alt=""
+        />
+        <div className="absolute inset-0 bg-emerald-600/80" />
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-4">
             <span className="flex items-center gap-1.5 text-xs font-bold bg-white/20 px-3 py-1 rounded-full">

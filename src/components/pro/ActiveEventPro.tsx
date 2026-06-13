@@ -95,13 +95,16 @@ export default function ActiveEventPro({ event, onRefetch, onViewAgenda }: Props
   return (
     <div className="flex flex-col min-h-[calc(100vh-130px)]">
 
-      {/* Hero verde pulsante */}
-      <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white px-5 pt-6 pb-8 relative overflow-hidden">
-        {/* pulse de fundo */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-4 right-4 w-32 h-32 rounded-full border-4 border-white animate-ping" style={{animationDuration:'3s'}} />
-          <div className="absolute top-8 right-8 w-20 h-20 rounded-full border-4 border-white animate-ping" style={{animationDuration:'3s',animationDelay:'0.5s'}} />
-        </div>
+      {/* Hero — mapa ao fundo + overlay verde 50% */}
+      <div className="text-white px-5 pt-6 pb-8 relative overflow-hidden" style={{minHeight: 220}}>
+        {/* Mapa estático como fundo */}
+        <img
+          src={`https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(event.location_name)}&zoom=15&size=800x400&markers=color:red|${encodeURIComponent(event.location_name)}&style=feature:all|element:labels|visibility:off&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`}
+          className="absolute inset-0 w-full h-full object-cover"
+          alt=""
+        />
+        {/* Overlay verde 50% */}
+        <div className="absolute inset-0 bg-emerald-600/80" />
 
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-4">
