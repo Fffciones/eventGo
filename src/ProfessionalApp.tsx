@@ -35,7 +35,12 @@ export default function ProfessionalApp() {
 
   const notifications = useProNotifications(agenda);
   const [dismissedIds, setDismissedIds]     = useState<Set<string>>(new Set());
-  const [postEventDone, setPostEventDone]   = useState<Set<string>>(new Set());
+  const [postEventDone, setPostEventDone] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('pro_post_event_done');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
   const [activeTab, setActiveTab]           = useState<ProTab>('map');
 
   // Motor do matchmaking: enquanto o app do profissional está aberto, damos
@@ -196,7 +201,11 @@ export default function ProfessionalApp() {
         {postEventNotif && (
           <PostEventModal
             notification={postEventNotif}
-            onClose={() => setPostEventDone(prev => new Set([...prev, postEventNotif.event.event_id]))}
+            onClose={() => {
+              const next = new Set([...postEventDone, postEventNotif.event.event_id]);
+              setPostEventDone(next);
+              localStorage.setItem('pro_post_event_done', JSON.stringify([...next]));
+            }}
           />
         )}
       </AnimatePresence>
