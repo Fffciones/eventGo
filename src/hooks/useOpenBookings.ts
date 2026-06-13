@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 export interface OpenBooking {
@@ -29,6 +29,7 @@ export function useOpenBookings(
 ) {
   const [bookings, setBookings] = useState<OpenBooking[]>([]);
   const [loading, setLoading]   = useState(true);
+  const channelId = useRef(`open-vagas-${Math.random().toString(36).slice(2)}`);
 
   const fetch = async () => {
     if (!professionalId) { setBookings([]); setLoading(false); return; }
@@ -91,7 +92,7 @@ export function useOpenBookings(
 
     // Realtime — atualiza quando uma vaga muda (alguém aceitou)
     const channel = supabase
-      .channel('open-vagas')
+      .channel(channelId.current)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'vagas',
       }, fetch)
