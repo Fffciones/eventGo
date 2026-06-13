@@ -111,10 +111,10 @@ export function useOpenBookings(
 
   // Aceitar a primeira vaga disponível do grupo (event + function).
   // Usa accept_open_vaga que faz FOR UPDATE SKIP LOCKED para evitar race condition.
-  const acceptVaga = async (eventId: string, functionId: string): Promise<boolean> => {
+  const acceptVaga = async (eventId: string, functionId?: string): Promise<boolean> => {
     const { data, error } = await supabase.rpc('accept_open_vaga', {
       p_event_id:    eventId,
-      p_function_id: functionId,
+      p_function_id: functionId ?? null,
     });
     if (error) throw error;
     await fetch();

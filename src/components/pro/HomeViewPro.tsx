@@ -142,9 +142,13 @@ export default function HomeViewPro({ profile }: Props) {
               booking={selected}
               onClose={() => setSelected(null)}
               onAccept={async () => {
-                const ok = await acceptVaga(selected.event_id, selected.function_id);
-                setSelected(null);
-                if (!ok) alert('Esta vaga acabou de ser preenchida por outro profissional.');
+                try {
+                  const ok = await acceptVaga(selected.event_id);
+                  setSelected(null);
+                  if (!ok) alert('Esta vaga acabou de ser preenchida por outro profissional.');
+                } catch (e: any) {
+                  alert(e?.message ?? 'Erro ao aceitar vaga.');
+                }
               }}
             />
           </motion.div>
@@ -191,7 +195,7 @@ function EventPin({ booking: b, selected, onClick }: {
 
 // ── Card de detalhe ──────────────────────────────────────────────────────────
 
-function EventCard({ booking: b, onClose, onAccept }: { booking: OpenBooking; onClose: () => void; onAccept: () => Promise<void> }) {
+function EventCard({ booking: b, onClose, onAccept }: { booking: OpenBooking; onClose: () => void; onAccept: () => Promise<void>; }) {
   const [accepting, setAccepting] = useState(false);
   const startsAt  = new Date(b.starts_at);
   const endsAt    = new Date(b.ends_at);

@@ -252,6 +252,7 @@ function InviteCard({ invite, onRespond }: { invite: PendingInvite; onRespond: P
 function VagaCard({ vaga, onAccept }: { vaga: OpenBooking; onAccept: Props['onAcceptVaga'] }) {
   const [loading, setLoading] = useState(false);
   const [accepted, setAccepted] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const startsAt  = new Date(vaga.starts_at);
   const endsAt    = new Date(vaga.ends_at);
@@ -265,9 +266,13 @@ function VagaCard({ vaga, onAccept }: { vaga: OpenBooking; onAccept: Props['onAc
 
   const handle = async () => {
     setLoading(true);
+    setErr(null);
     try {
-      const ok = await onAccept(vaga.event_id, vaga.function_id);
+      const ok = await onAccept(vaga.event_id);
       if (ok) setAccepted(true);
+      else setErr('Vaga preenchida por outro profissional agora mesmo.');
+    } catch (e: any) {
+      setErr(e?.message ?? 'Erro ao aceitar vaga.');
     } finally {
       setLoading(false);
     }
@@ -332,7 +337,10 @@ function VagaCard({ vaga, onAccept }: { vaga: OpenBooking; onAccept: Props['onAc
         </div>
       </div>
 
-      <div className="px-4 pb-4 pt-2 border-t border-slate-100">
+      <div className="px-4 pb-4 pt-2 border-t border-slate-100 flex flex-col gap-2">
+        {err && (
+          <p className="text-xs text-red-600 font-semibold text-center">{err}</p>
+        )}
         <button
           disabled={loading}
           onClick={handle}
