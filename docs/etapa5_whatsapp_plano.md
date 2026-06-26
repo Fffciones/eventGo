@@ -95,13 +95,33 @@ Trocar de provedor = trocar a env `WHATSAPP_PROVIDER` + secrets. Nada mais muda.
    - ao concluir, cria `users` + perfil (reutiliza lógica do signup).
 6. **Política de canal**: dispatch envia ao WhatsApp só o que as regras mandam
    (contratante: emergências; profissional: alertas definidos em `profissional_interface_rules.md`).
+7. **Validação de telefone no cadastro (OTP)** — adicionada em 2026-06 após observar o fluxo
+   de outra plataforma (confirmação por código de 4-6 dígitos antes de liberar o cadastro):
+   - **Problema hoje**: `users.phone` é texto livre, sem máscara, sem confirmação de posse —
+     só `UNIQUE` (pega duplicado, não pega número errado/inventado). Como o telefone é a base
+     de toda a entrega da 5A (deep links, alerta 60min, "estou a caminho"), número fake/errado
+     quebra o profissional silenciosamente: ele nunca recebe nada e nada falha visivelmente.
+   - **Por que entra no 5B, não antes**: a forma mais natural de validar é mandar o código pelo
+     próprio canal que estamos integrando. **Meta Cloud API tem suporte nativo a "authentication
+     templates"** (mensagem de OTP pré-aprovada, fora da janela de 24h) — ou seja, dá pra resolver
+     com o **mesmo provedor e a mesma decisão** da Fase 5B, sem contratar um vendor de SMS à parte
+     (Twilio Verify, Zenvia, etc.).
+   - **Fluxo proposto**: no passo de telefone do cadastro (Contratante e Profissional), gerar
+     código de 4-6 dígitos, enviar via WhatsApp (template de autenticação) ou SMS (fallback se o
+     provedor escolhido não suportar/não tiver opt-in), usuário confirma antes de liberar o
+     restante do formulário. Reaproveita a tabela `notifications`/dispatcher ou uma tabela
+     dedicada `phone_otp_codes` (código, telefone, expira_em, tentativas).
+   - **Decisão pendente**: confirmar com o provedor escolhido (item abaixo) se o canal de OTP
+     será WhatsApp, SMS, ou os dois (WhatsApp como principal, SMS como fallback para quem não
+     tem WhatsApp/recusa opt-in).
 
 ---
 
 ## Decisões em aberto (precisam de você)
-- **Provedor** (define se "grupo por evento" automático é viável).
+- **Provedor** (define se "grupo por evento" automático é viável, e se cobre OTP nativo).
 - **Número WhatsApp da plataforma** (para os deep links de onboarding e o `from`).
 - **Escopo de envio**: seguir "só emergências" (regras atuais) ou ampliar.
+- **Canal de validação de telefone no cadastro**: WhatsApp OTP, SMS, ou ambos (item 7 do 5B).
 
 ## Sequência sugerida de implementação
 1. 5A schema + `lib/whatsapp.ts` + deep links (rápido, sem custo).
