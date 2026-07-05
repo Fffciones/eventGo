@@ -15,7 +15,15 @@ interface AuthScreenProps {
 export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const { signIn, signUp, signInWithGoogle, resetPassword } = useAuth();
 
-  const [mode, setMode]           = useState<AuthMode>('landing');
+  // Deep-link vindo da landing (/site): ?auth=login|signup-client|signup-professional
+  const initialMode = (): AuthMode => {
+    if (typeof window === 'undefined') return 'landing';
+    const p = new URLSearchParams(window.location.search).get('auth');
+    if (p === 'login' || p === 'signup-client' || p === 'signup-professional') return p;
+    return 'landing';
+  };
+
+  const [mode, setMode]           = useState<AuthMode>(initialMode);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState<string | null>(null);

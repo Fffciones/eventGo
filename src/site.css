@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+@import "tailwindcss";
+
+/*
+ * Tema dedicado da landing pública (/site).
+ * Mantém a identidade escura gerada no Stitch, isolada do design system
+ * do app principal (src/index.css) — os dois entry points nunca se cruzam.
+ */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Manrope", sans-serif;
+
+  --color-surface-dim: #13131b;
+  --color-surface-bright: #393841;
+  --color-surface-container-lowest: #0d0d15;
+  --color-surface-container-low: #1b1b23;
+  --color-surface-container: #1f1f27;
+  --color-surface-container-high: #292932;
+  --color-surface-container-highest: #34343d;
+  --color-on-surface: #e4e1ed;
+  --color-on-surface-variant: #c7c4d7;
+  --color-inverse-surface: #e4e1ed;
+  --color-inverse-on-surface: #303038;
+  --color-outline: #908fa0;
+  --color-outline-variant: #464554;
+  --color-surface-tint: #c0c1ff;
+  --color-primary: #c0c1ff;
+  --color-on-primary: #1000a9;
+  --color-primary-container: #8083ff;
+  --color-on-primary-container: #0d0096;
+  --color-inverse-primary: #494bd6;
+  --color-secondary: #b9c8de;
+  --color-on-secondary: #233143;
+  --color-secondary-container: #39485a;
+  --color-on-secondary-container: #a7b6cc;
+  --color-tertiary: #ffb783;
+  --color-on-tertiary: #4f2500;
+  --color-tertiary-container: #d97721;
+  --color-on-tertiary-container: #452000;
+  --color-error: #ffb4ab;
+  --color-on-error: #690005;
+  --color-error-container: #93000a;
+  --color-on-error-container: #ffdad6;
+  --color-primary-fixed: #e1e0ff;
+  --color-primary-fixed-dim: #c0c1ff;
+  --color-on-primary-fixed: #07006c;
+  --color-on-primary-fixed-variant: #2f2ebe;
+  --color-secondary-fixed: #d4e4fa;
+  --color-secondary-fixed-dim: #b9c8de;
+  --color-on-secondary-fixed: #0d1c2d;
+  --color-on-secondary-fixed-variant: #39485a;
+  --color-tertiary-fixed: #ffdcc5;
+  --color-tertiary-fixed-dim: #ffb783;
+  --color-on-tertiary-fixed: #301400;
+  --color-on-tertiary-fixed-variant: #703700;
+  --color-background: #13131b;
+  --color-on-background: #e4e1ed;
+  --color-surface-variant: #34343d;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-on-background);
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out both;
+}
