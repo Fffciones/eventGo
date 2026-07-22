@@ -68,11 +68,19 @@ export function useAuth() {
   );
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      setLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        setSession(data.session);
+        setUser(data.session?.user ?? null);
+        setLoading(false);
+      })
+      .catch(() => {
+        // Token de sessão corrompido/expirado no localStorage — evita travar no splash
+        supabase.auth.signOut().catch(() => {});
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);

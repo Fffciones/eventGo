@@ -43,15 +43,24 @@ export function useAdminAuth() {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      const u = data.session?.user ?? null;
-      setUser(u);
-      if (u) {
-        loadAdmin(u.id).finally(() => setLoading(false));
-      } else {
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        const u = data.session?.user ?? null;
+        setUser(u);
+        if (u) {
+          loadAdmin(u.id).finally(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        // Token de sessão corrompido/expirado no localStorage — evita travar no splash
+        supabase.auth.signOut().catch(() => {});
+        setUser(null);
+        setAdmin(null);
+        setForbidden(true);
         setLoading(false);
-      }
-    });
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       const u = session?.user ?? null;
