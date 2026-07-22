@@ -92,7 +92,7 @@ export default function EventosAdmin() {
       `)
       .order('starts_at', { ascending: true })
       .limit(200);
-    setEvents((data as Event[]) ?? []);
+    setEvents((data as unknown as Event[]) ?? []);
     setLoading(false);
   }, []);
 

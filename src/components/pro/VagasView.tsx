@@ -268,7 +268,7 @@ function VagaCard({ vaga, onAccept }: { vaga: OpenBooking; onAccept: Props['onAc
     setLoading(true);
     setErr(null);
     try {
-      const ok = await onAccept(vaga.event_id);
+      const ok = await onAccept(vaga.event_id, vaga.function_id);
       if (ok) setAccepted(true);
       else setErr('Vaga preenchida por outro profissional agora mesmo.');
     } catch (e: any) {

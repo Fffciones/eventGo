@@ -46,7 +46,7 @@ export default function ProfissionaisAdmin() {
         professional_functions(functions(name))
       `)
       .order('created_at', { ascending: false });
-    setProfessionals((data as Professional[]) ?? []);
+    setProfessionals((data as unknown as Professional[]) ?? []);
     setLoading(false);
   }, []);
 

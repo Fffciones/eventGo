@@ -53,8 +53,6 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [signupPhone, setSignupPhone]     = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupDoc, setSignupDoc]         = useState('');
-  const [signupMei, setSignupMei]         = useState('');
-  const [signupCategory, setSignupCategory] = useState('GARCOM');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,33 +83,6 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     setSuccess(true);
     setTimeout(onAuthenticated, 2000);
     setLoading(false);
-  };
-
-  const handleSignupProfessional = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    const { data, error } = await signUp(signupEmail, signupPassword, signupName, 'PROFESSIONAL');
-    if (error) { setError(error.message); setLoading(false); return; }
-
-    if (data.session) {
-      const { error: profileError } = await supabase.rpc('create_professional_profile', {
-        p_mei_number: signupMei,
-        p_category:   signupCategory,
-      });
-      if (profileError) { setError('Conta criada, mas erro ao salvar perfil: ' + profileError.message); setLoading(false); return; }
-    }
-
-    setSuccess(true);
-    setTimeout(onAuthenticated, 2000);
-    setLoading(false);
-  };
-
-  const categoryLabels: Record<string, string> = {
-    GARCOM: 'Garçom', DJ: 'DJ', SEGURANCA: 'Segurança',
-    FAXINEIRO: 'Limpeza', FOTOGRAFO: 'Fotógrafo',
-    MESTRE_CERIMONIAS: 'Mestre de Cerimônias',
-    PRODUTOR: 'Produtor', CONTROLADOR_ACESSO: 'Controle de Acesso',
   };
 
   // Redireciona para tela dedicada de cadastro profissional
@@ -424,72 +395,6 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
         )}
 
         {/* ── CADASTRO PROFISSIONAL ── */}
-        {mode === 'signup-professional' && (
-          <motion.div key="signup-professional"
-            initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
-            className="flex-1 flex flex-col px-6 pt-2 pb-12 max-w-md mx-auto w-full overflow-y-auto">
-
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-secondary-container/30 flex items-center justify-center">
-                <User className="w-4 h-4 text-secondary" />
-              </div>
-              <div>
-                <h2 className="font-display text-2xl font-bold text-primary leading-tight">Cadastro Profissional</h2>
-                <p className="text-xs text-on-surface-variant">Ganhe R$ 5,00 no cadastro via Pix!</p>
-              </div>
-            </div>
-
-            <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 mb-5 text-xs text-on-surface-variant">
-              💡 Após o cadastro, envie sua documentação e MEI para ativar sua conta e receber o bônus de boas-vindas.
-            </div>
-
-            <form onSubmit={handleSignupProfessional} className="space-y-4">
-              <Field label="Nome completo">
-                <input type="text" required value={signupName} onChange={e => setSignupName(e.target.value)}
-                  placeholder="Seu nome" className={inputClass} />
-              </Field>
-              <Field label="E-mail">
-                <input type="email" required value={signupEmail} onChange={e => setSignupEmail(e.target.value)}
-                  placeholder="seu@email.com" className={inputClass} />
-              </Field>
-              <Field label="Telefone / WhatsApp">
-                <input type="tel" value={signupPhone} onChange={e => setSignupPhone(e.target.value)}
-                  placeholder="(11) 99999-9999" className={inputClass} />
-              </Field>
-              <Field label="Número MEI">
-                <input type="text" required value={signupMei} onChange={e => setSignupMei(e.target.value)}
-                  placeholder="00.000.000/0001-00" className={inputClass} />
-              </Field>
-              <Field label="Categoria principal">
-                <select value={signupCategory} onChange={e => setSignupCategory(e.target.value)}
-                  className={inputClass}>
-                  {Object.entries(categoryLabels).map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Senha">
-                <div className="relative">
-                  <input type={showPassword ? 'text' : 'password'} required value={signupPassword}
-                    onChange={e => setSignupPassword(e.target.value)} placeholder="Mín. 8 caracteres"
-                    minLength={8} className={`${inputClass} pr-12`} />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant">
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </Field>
-
-              {error && <p className="text-error text-xs bg-error-container px-3 py-2 rounded-lg">{error}</p>}
-
-              <button type="submit" disabled={loading}
-                className="w-full bg-primary text-on-primary font-semibold py-3.5 rounded-xl shadow-md active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2 mt-2">
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Quero me cadastrar'}
-              </button>
-            </form>
-          </motion.div>
-        )}
-
       </AnimatePresence>
     </div>
   );

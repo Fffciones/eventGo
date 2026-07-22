@@ -73,7 +73,7 @@ export default function ActiveEventPro({ event, onRefetch, onViewAgenda }: Props
   const endsAt   = new Date(event.ends_at);
   const timeRange = `${startsAt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} – ${endsAt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
 
-  const run = async (fn: () => Promise<unknown>) => {
+  const run = async (fn: () => PromiseLike<unknown>) => {
     setLoading(true);
     try { await fn(); onRefetch(); }
     finally { setLoading(false); }

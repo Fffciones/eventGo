@@ -27,7 +27,7 @@ export function useAdminAuth() {
       .single();
 
     if (data) {
-      const u = data.users as { full_name: string; email: string } | null;
+      const u = data.users as unknown as { full_name: string; email: string } | null;
       setAdmin({
         id: data.id,
         user_id: data.user_id,

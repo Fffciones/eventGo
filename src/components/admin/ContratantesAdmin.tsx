@@ -60,7 +60,7 @@ export default function ContratantesAdmin() {
       .from('clients')
       .select('id, user_id, document, is_company, credit_balance, credit_limit, created_at, users(full_name, email, phone)')
       .order('created_at', { ascending: false });
-    setClients((data as Client[]) ?? []);
+    setClients((data as unknown as Client[]) ?? []);
     setLoading(false);
   }, []);
 

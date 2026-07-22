@@ -69,7 +69,7 @@ export function useAvailableProfessionalsMap(categoryFilter?: ProfessionalCatego
         if (!geo?.coordinates) continue;
 
         const [lng, lat] = geo.coordinates;
-        const u = row.users as { full_name: string; avatar_url: string | null } | null;
+        const u = row.users as unknown as { full_name: string; avatar_url: string | null } | null;
 
         result.push({
           professional_id: row.id,

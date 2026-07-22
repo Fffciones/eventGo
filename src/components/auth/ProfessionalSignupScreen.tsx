@@ -66,6 +66,10 @@ export default function ProfessionalSignupScreen({ onBack, onSuccess }: Professi
     setError(null);
 
     try {
+      // Categoria legada = slug da primeira função selecionada
+      const firstFunction = allFunctions.find(f => f.id === selectedFunctionIds[0]);
+      const legacyCategory = firstFunction?.slug.toUpperCase() ?? 'GARCOM';
+
       // 1. Criar conta no Supabase Auth
       const { data, error: authError } = await supabase.auth.signUp({
         email,
@@ -76,7 +80,7 @@ export default function ProfessionalSignupScreen({ onBack, onSuccess }: Professi
             user_type:       'PROFESSIONAL',
             professional_type: professionalType,
             mei_number:      professionalType === 'MEI' ? mei : null,
-            category,
+            category:        legacyCategory,
             phone,
             whatsapp_opt_in: whatsapp,
           },
@@ -91,10 +95,6 @@ export default function ProfessionalSignupScreen({ onBack, onSuccess }: Professi
           phone,
           whatsapp_opt_in: whatsapp,
         }).eq('id', data.session.user.id);
-
-        // Categoria legada = slug da primeira função selecionada
-        const firstFunction = allFunctions.find(f => f.id === selectedFunctionIds[0]);
-        const legacyCategory = firstFunction?.slug.toUpperCase() ?? 'GARCOM';
 
         const { data: proData } = await supabase.from('professionals').insert({
           user_id:           data.session.user.id,

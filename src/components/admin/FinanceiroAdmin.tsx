@@ -44,8 +44,8 @@ export default function FinanceiroAdmin() {
         .order('paid_at', { ascending: false })
         .limit(100),
     ]);
-    setCharges((c as ChargeRow[]) ?? []);
-    setPayouts((p as PayoutRow[]) ?? []);
+    setCharges((c as unknown as ChargeRow[]) ?? []);
+    setPayouts((p as unknown as PayoutRow[]) ?? []);
     setLoading(false);
   }, []);
 

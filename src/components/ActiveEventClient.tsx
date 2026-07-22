@@ -71,7 +71,7 @@ export default function ActiveEventClient({ event, onViewAll }: Props) {
       .select('id, category, worker_status, professional_id, checkin_at, gps_active, professionals(users(full_name, avatar_url))')
       .eq('event_id', event.id)
       .not('worker_status', 'is', null);
-    setTeam((data as VagaTeam[]) ?? []);
+    setTeam((data as unknown as VagaTeam[]) ?? []);
   };
 
   useEffect(() => {

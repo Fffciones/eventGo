@@ -95,7 +95,7 @@ function AgendaCard({ event, onRefetch }: { event: AgendaEvent; onRefetch: () =>
   const briefing = event.briefing ?? {};
   const hasBriefing = Object.keys(briefing).length > 0;
 
-  const runAction = async (fn: () => Promise<unknown>) => {
+  const runAction = async (fn: () => PromiseLike<unknown>) => {
     setLoading(true);
     try {
       await fn();

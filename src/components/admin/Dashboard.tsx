@@ -59,7 +59,7 @@ export default function Dashboard() {
         activeEvents: activeEvents ?? 0,
         totalRevenue,
       });
-      setRecent((recentEvents as RecentEvent[]) ?? []);
+      setRecent((recentEvents as unknown as RecentEvent[]) ?? []);
       setLoading(false);
     }
     load();
