@@ -31,52 +31,47 @@ VITE_GOOGLE_MAPS_API_KEY=
 Pedir ao Fabricio as chaves para criar o `.env.local` local.
 
 ## Estrutura do projeto
+
+Desde 2026-07-24 `src/` é modular por app — cada view (Contratante,
+Profissional, Admin, landing pública) tem sua própria pasta em `src/apps/`,
+e só o que é realmente usado por 2+ apps mora em `src/shared/`. O build
+continua sendo um único Vite (4 entradas HTML), sem monorepo. Fronteiras
+entre apps são checadas em `npm run lint` (4 `tsconfig.<app>.json`
+escopados + `scripts/check-boundaries.mjs`) — um app não pode importar
+arquivo de outro app, só de `shared/`.
+
 ```
 src/
-├── components/
-│   ├── auth/AuthScreen.tsx           # Login + cadastro (Contratante e Profissional)
-│   ├── CreateEventScreen.tsx         # Criação de evento em 3 passos
-│   ├── HomeView.tsx                  # Mapa + busca (dados ainda estáticos)
-│   ├── BookingsView.tsx              # Bookings do evento ativo
-│   ├── FavoritesView.tsx             # Profissionais favoritos
-│   ├── ProfileView.tsx               # Perfil do contratante logado
-│   └── pro/
-│       ├── HomeViewPro.tsx           # Mapa com vagas abertas (Google Maps real)
-│       ├── ConviteView.tsx           # Convites pendentes + aceitar/recusar
-│       ├── AgendaView.tsx            # Agenda cronológica + botões de ação
-│       ├── ProfileViewPro.tsx        # Perfil do profissional
-│       └── ProNotifications.tsx      # Banners e modal de notificações
-├── hooks/
-│   ├── useAuth.ts                    # Auth Supabase + auto-criação de perfil
-│   ├── useProfile.ts                 # Dados do contratante logado
-│   ├── useEvents.ts                  # CRUD de eventos
-│   ├── useBookings.ts                # Bookings + realtime
-│   ├── useProfessionals.ts           # Busca de profissionais disponíveis
-│   ├── useNotifications.ts           # Notificações realtime
-│   ├── useProfessionalProfile.ts     # Perfil completo + convites + agenda do profissional
-│   ├── useProNotifications.ts        # Lógica de alertas e silêncio do profissional
-│   ├── useOpenBookings.ts            # Vagas abertas no mapa do profissional
-│   ├── useAvatarUpload.ts            # Upload de avatar para Supabase Storage
-│   └── useGeocoding.ts              # Geocoding via OpenStreetMap Nominatim
-├── lib/
-│   ├── supabase.ts                   # Cliente Supabase
-│   └── database.types.ts            # Tipos das tabelas
-├── App.tsx                           # App do Contratante
-├── ProfessionalApp.tsx               # App do Profissional (/pro)
-└── main-pro.tsx                      # Entry point do app profissional
-pro/
-└── index.html                        # HTML entry point de /pro
-supabase/
-└── migrations/
-    ├── 001_initial_schema.sql        # Schema completo (20 tabelas)
-    ├── 002_auth_and_rls.sql          # RLS + trigger de auth
-    ├── 003_business_logic.sql        # Funções de negócio
-    ├── 004_transit_tracking.sql      # Rastreio de deslocamento
-    ├── 005_early_checkin.sql         # Chegada antecipada + critérios de avaliação
-    ├── 006_seed_professionals.sql    # 10 profissionais fictícios + preços
-    ├── 007_fix_signup.sql            # Políticas INSERT + funções de perfil
-    ├── 008_profile_on_first_login.sql# Criação de perfil pós-confirmação
-    └── 009_reseed_professionals.sql  # 40 profissionais seed (5 por categoria)
+├── main.tsx / main-pro.tsx / main-admin.tsx / main-site.tsx  # bootstrap de cada app
+├── index.css                          # estilos globais (Contratante+Profissional+Admin)
+├── apps/
+│   ├── contratante/
+│   │   ├── App.tsx
+│   │   ├── components/                # ActiveEventClient, BookingsView, CreateEventScreen,
+│   │   │                               # FavoritesView, HomeView, ProfileView
+│   │   └── hooks/                     # useAvailableProfessionalsMap, useEvents,
+│   │                                   # useNotifications, useProfile
+│   ├── profissional/
+│   │   ├── ProfessionalApp.tsx
+│   │   ├── components/                # ActiveEventPro, AgendaView, HomeViewPro,
+│   │   │                               # ProNotifications, ProfileViewPro, VagasView
+│   │   └── hooks/                     # useOpenBookings, useProNotifications,
+│   │                                   # useProfessionalProfile
+│   ├── admin/
+│   │   ├── AdminApp.tsx
+│   │   ├── components/                # AdminLogin, AdminsAdmin, ContratantesAdmin, Dashboard,
+│   │   │                               # EventosAdmin, FinanceiroAdmin, FuncoesAdmin,
+│   │   │                               # ProfissionaisAdmin, VagasAdmin, VariaveisAdmin
+│   │   └── hooks/useAdminAuth.ts
+│   └── site/                          # landing pública (/site), sem dependência de shared/
+│       ├── SiteApp.tsx, siteConfig.ts, site.css
+└── shared/
+    ├── lib/                           # supabase.ts, database.types.ts, whatsapp.ts, whatsappTemplates.ts
+    ├── auth/                          # AuthScreen, ResetPasswordScreen, ProfessionalSignupScreen
+    ├── components/GeoAddressInput.tsx
+    └── hooks/                         # useAuth, useAvatarUpload, useFunctions, useGeocoding
+pro/index.html · admin/index.html · site/index.html   # HTML entry points (raiz do repo)
+supabase/migrations/                   # 23 migrations, cronológicas (001 → 023)
 ```
 
 ## Dois apps separados (modelo Uber / Uber Driver)

@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/apps/admin/**/*",
+    "src/shared/**/*",
+    "src/main-admin.tsx"
+  ]
+}
