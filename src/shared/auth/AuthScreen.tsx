@@ -165,8 +165,9 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             </div>
 
             <p className="text-xs text-on-surface-variant">
-              Ao continuar, você aceita os <span className="text-primary font-medium">Termos de Uso</span> e a{' '}
-              <span className="text-primary font-medium">Política de Privacidade</span>.
+              Ao continuar, você aceita os{' '}
+              <a href="/site/termos" target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline">Termos de Uso</a> e a{' '}
+              <a href="/site/privacidade" target="_blank" rel="noopener noreferrer" className="text-primary font-medium hover:underline">Política de Privacidade</a>.
             </p>
           </motion.div>
         )}

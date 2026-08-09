@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 
 import { AUTH_LINKS, APP_STORE_URL, GOOGLE_PLAY_URL, IMAGES, CATEGORIES } from './siteConfig';
+import TermosDeUso from './legal/TermosDeUso';
+import PoliticaPrivacidade from './legal/PoliticaPrivacidade';
+import CookieConsentBanner from './components/CookieConsentBanner';
 
 /** Ícone inline de cifrão (não existe DollarSign no set importado acima). */
 function DollarSignIcon({ className }: { className?: string }) {
@@ -62,7 +65,7 @@ function StoreBadge({ url, icon, store }: { url: string; icon: ReactNode; store:
   );
 }
 
-export default function SiteApp() {
+function LandingPage() {
   const [activeStep, setActiveStep] = useState<1 | 2 | 3>(2);
   const categoriesRef = useRef<HTMLDivElement>(null);
   const howItWorksRef = useRef<HTMLDivElement>(null);
@@ -393,9 +396,9 @@ export default function SiteApp() {
           <nav aria-label="Legal">
             <h4 className="text-xs font-bold text-on-surface mb-4 uppercase tracking-wider">Legal</h4>
             <ul className="space-y-3">
-              {/* TODO: páginas legais reais */}
-              <li><a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Termos de Uso</a></li>
-              <li><a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Política de Privacidade</a></li>
+              <li><a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="/site/termos">Termos de Uso</a></li>
+              <li><a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="/site/privacidade">Política de Privacidade</a></li>
+              {/* TODO: página institucional real */}
               <li><a className="text-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Segurança e Confiança</a></li>
             </ul>
           </nav>
@@ -416,5 +419,22 @@ export default function SiteApp() {
         </div>
       </footer>
     </div>
+  );
+}
+
+/** Páginas locais de /site — roteamento simples por pathname (sem react-router, ver vercel.json /site/:path*). */
+export default function SiteApp() {
+  const path = typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '') : '/site';
+
+  let page: ReactNode;
+  if (path.endsWith('/termos')) page = <TermosDeUso />;
+  else if (path.endsWith('/privacidade')) page = <PoliticaPrivacidade />;
+  else page = <LandingPage />;
+
+  return (
+    <>
+      {page}
+      <CookieConsentBanner />
+    </>
   );
 }
